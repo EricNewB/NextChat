@@ -94,6 +94,26 @@ For enterprise inquiries, please contact: **business@nextchat.dev**
 
 </div>
 
+## Technical Highlights
+
+### Real-time Voice Chat
+
+This project implements real-time voice conversation capabilities using the OpenAI Realtime API. Below are the key technical details of the implementation:
+
+-   **Core SDK**: We utilize the official `@openai/realtime-api-beta` SDK to handle the connection and communication with the OpenAI Realtime API. This beta SDK provides the necessary tools for streaming audio and receiving real-time responses.
+
+-   **Audio Streaming**:
+    -   **Capture**: Audio is captured from the user's microphone in the browser using the `MediaDevices.getUserMedia` API.
+    -   **Processing**: An `AudioWorklet` is employed to process the raw audio data in a separate thread, ensuring the main UI thread remains responsive. It converts the audio into the required PCM16 format.
+    -   **Sending**: The processed audio chunks are streamed to the OpenAI server using the `RealtimeClient.appendInputAudio()` method.
+
+-   **Sequential Audio Playback**: To address the common issue of overlapping audio chunks that can make the AI's response sound like multiple voices speaking at once, a robust, event-driven playback queue was implemented in the `AudioHandler` service.
+    -   **Queue Mechanism**: Incoming audio chunks from the server are added to a queue.
+    -   **Event-Driven Playback**: The `onended` event of the `AudioBufferSourceNode` is used to create a self-driving loop. A new audio chunk from the queue is played only after the previous one has finished, ensuring a seamless and natural-sounding audio stream.
+    -   **State Management**: A state machine (`isPlaying`, `currentSource`) precisely controls the playback flow and allows for immediate interruption.
+
+-   **Turn Detection**: The application configures server-side Voice Activity Detection (VAD) by setting the `turn_detection: { type: "server_vad" }` parameter during the session setup. This allows the OpenAI server to automatically detect when the user has finished speaking, triggering the AI's response. The option to disable VAD is also available for manual turn control.
+
 ## Roadmap
 
 - [x] System Prompt: pin a user defined prompt as system prompt [#138](https://github.com/Yidadaa/ChatGPT-Next-Web/issues/138)
