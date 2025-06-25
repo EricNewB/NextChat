@@ -177,6 +177,7 @@ export const OpenaiPath = {
   UsagePath: "dashboard/billing/usage",
   SubsPath: "dashboard/billing/subscription",
   ListModelPath: "v1/models",
+  RealtimeChatPath: "v1/realtime/chat/completions",
 };
 
 export const Azure = {

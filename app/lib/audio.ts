@@ -9,10 +9,10 @@ export class AudioHandler {
   private recordBuffer: Int16Array[] = [];
   private readonly sampleRate = 24000;
 
-  private nextPlayTime: number = 0;
   private isPlaying: boolean = false;
-  private playbackQueue: AudioBufferSourceNode[] = [];
+  private playbackQueue: Uint8Array[] = [];
   private playBuffer: Int16Array[] = [];
+  private currentSource: AudioBufferSourceNode | null = null;
 
   constructor() {
     this.context = new AudioContext({ sampleRate: this.sampleRate });
@@ -95,19 +95,37 @@ export class AudioHandler {
     this.stream.getTracks().forEach((track) => track.stop());
   }
   startStreamingPlayback() {
-    this.isPlaying = true;
-    this.nextPlayTime = this.context.currentTime;
+    this.context.resume();
   }
 
   stopStreamingPlayback() {
     this.isPlaying = false;
-    this.playbackQueue.forEach((source) => source.stop());
     this.playbackQueue = [];
+    if (this.currentSource) {
+      this.currentSource.onended = null;
+      this.currentSource.stop();
+      this.currentSource = null;
+    }
     this.playBuffer = [];
   }
 
   playChunk(chunk: Uint8Array) {
-    if (!this.isPlaying) return;
+    this.playbackQueue.push(chunk);
+    if (!this.isPlaying) {
+      this.playNext();
+    }
+  }
+
+  private playNext = () => {
+    if (this.playbackQueue.length === 0) {
+      this.isPlaying = false;
+      this.currentSource = null;
+      return;
+    }
+
+    this.isPlaying = true;
+    const chunk = this.playbackQueue.shift();
+    if (!chunk) return;
 
     const int16Data = new Int16Array(chunk.buffer);
     // @ts-ignore
@@ -129,25 +147,16 @@ export class AudioHandler {
     source.buffer = audioBuffer;
     source.connect(this.context.destination);
     source.connect(this.mergeNode, 0, 1);
-
-    const chunkDuration = audioBuffer.length / this.sampleRate;
-
-    source.start(this.nextPlayTime);
-
-    this.playbackQueue.push(source);
     source.onended = () => {
-      const index = this.playbackQueue.indexOf(source);
-      if (index > -1) {
-        this.playbackQueue.splice(index, 1);
+      if (this.currentSource === source) {
+        this.currentSource = null;
       }
+      this.playNext();
     };
+    this.currentSource = source;
+    source.start();
+  };
 
-    this.nextPlayTime += chunkDuration;
-
-    if (this.nextPlayTime < this.context.currentTime) {
-      this.nextPlayTime = this.context.currentTime;
-    }
-  }
   _saveData(data: Int16Array, bytesPerSample = 16): Blob {
     const headerLength = 44;
     const numberOfChannels = 1;
@@ -169,7 +178,7 @@ export class AudioHandler {
     view.setUint32(40, byteLength, true); // data chunk length
 
     // using data.buffer, so no need to setUint16 to view.
-    return new Blob([view, data.buffer], { type: "audio/mpeg" });
+    return new Blob([view, data], { type: "audio/mpeg" });
   }
   savePlayFile() {
     // @ts-ignore

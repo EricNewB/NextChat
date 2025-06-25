@@ -11,13 +11,7 @@ import { useChatStore, createMessage, useAppConfig } from "@/app/store";
 
 import { IconButton } from "@/app/components/button";
 
-import {
-  Modality,
-  RTClient,
-  RTInputAudioItem,
-  RTResponse,
-  TurnDetection,
-} from "rt-client";
+import { RealtimeClient } from "@openai/realtime-api-beta";
 import { AudioHandler } from "@/app/lib/audio";
 import { uploadImage } from "@/app/utils/chat";
 import { VoicePrint } from "@/app/components/voice-print";
@@ -44,7 +38,7 @@ export function RealtimeChat({
   const [useVAD, setUseVAD] = useState(true);
   const [frequencies, setFrequencies] = useState<Uint8Array | undefined>();
 
-  const clientRef = useRef<RTClient | null>(null);
+  const clientRef = useRef<RealtimeClient | null>(null);
   const audioHandlerRef = useRef<AudioHandler | null>(null);
   const initRef = useRef(false);
 
@@ -57,71 +51,71 @@ export function RealtimeChat({
   const voice = config.realtimeConfig.voice;
 
   const handleConnect = async () => {
-    if (isConnecting) return;
-    if (!isConnected) {
-      try {
-        setIsConnecting(true);
-        clientRef.current = azure
-          ? new RTClient(
-              new URL(azureEndpoint),
-              { key: apiKey },
-              { deployment: azureDeployment },
-            )
-          : new RTClient({ key: apiKey }, { model });
-        const modalities: Modality[] =
-          modality === "audio" ? ["text", "audio"] : ["text"];
-        const turnDetection: TurnDetection = useVAD
-          ? { type: "server_vad" }
-          : null;
-        await clientRef.current.configure({
-          instructions: "",
-          voice,
-          input_audio_transcription: { model: "whisper-1" },
-          turn_detection: turnDetection,
-          tools: [],
-          temperature,
-          modalities,
-        });
-        startResponseListener();
-
-        setIsConnected(true);
-        // TODO
-        // try {
-        //   const recentMessages = chatStore.getMessagesWithMemory();
-        //   for (const message of recentMessages) {
-        //     const { role, content } = message;
-        //     if (typeof content === "string") {
-        //       await clientRef.current.sendItem({
-        //         type: "message",
-        //         role: role as any,
-        //         content: [
-        //           {
-        //             type: (role === "assistant" ? "text" : "input_text") as any,
-        //             text: content as string,
-        //           },
-        //         ],
-        //       });
-        //     }
-        //   }
-        //   // await clientRef.current.generateResponse();
-        // } catch (error) {
-        //   console.error("Set message failed:", error);
-        // }
-      } catch (error) {
-        console.error("Connection failed:", error);
-        setStatus("Connection failed");
-      } finally {
-        setIsConnecting(false);
-      }
-    } else {
+    if (isConnecting || isConnected) {
       await disconnect();
+      return;
+    }
+    try {
+      setIsConnecting(true);
+
+      // We do not recommend this, your API keys are at risk if you connect to OpenAI directly from the browser.
+      // see: https://github.com/openai/openai-realtime-api-beta?tab=readme-ov-file#browser-front-end-quickstart
+      clientRef.current = new RealtimeClient({
+        apiKey,
+        dangerouslyAllowAPIKeyInBrowser: true,
+      });
+
+      // Set up event handling
+      startResponseListener();
+
+      // Connect to Realtime API
+      await clientRef.current.connect();
+
+      // Can set parameters ahead of connecting, either separately or all at once
+      await clientRef.current.updateSession({
+        model,
+        voice,
+        temperature,
+        turn_detection: (useVAD
+          ? { type: "server_vad" }
+          : { type: "none" }) as any,
+      });
+
+      setIsConnected(true);
+      // TODO
+      // try {
+      //   const recentMessages = chatStore.getMessagesWithMemory();
+      //   for (const message of recentMessages) {
+      //     const { role, content } = message;
+      //     if (typeof content === "string") {
+      //       await clientRef.current.sendItem({
+      //         type: "message",
+      //         role: role as any,
+      //         content: [
+      //           {
+      //             type: (role === "assistant" ? "text" : "input_text") as any,
+      //             text: content as string,
+      //           },
+      //         ],
+      //       });
+      //     }
+      //   }
+      //   // await clientRef.current.generateResponse();
+      // } catch (error) {
+      //   console.error("Set message failed:", error);
+      // }
+    } catch (error) {
+      console.error("Connection failed:", error);
+      setStatus("Connection failed");
+    } finally {
+      setIsConnecting(false);
     }
   };
 
   const disconnect = async () => {
     if (clientRef.current) {
       try {
-        await clientRef.current.close();
+        await clientRef.current.disconnect();
         clientRef.current = null;
         setIsConnected(false);
       } catch (error) {
@@ -133,96 +127,100 @@ export function RealtimeChat({
   const startResponseListener = async () => {
     if (!clientRef.current) return;
 
-    try {
-      for await (const serverEvent of clientRef.current.events()) {
-        if (serverEvent.type === "response") {
-          await handleResponse(serverEvent);
-        } else if (serverEvent.type === "input_audio") {
-          await handleInputAudio(serverEvent);
-        }
+    clientRef.current.on("conversation.updated", (event: any) => {
+      const { item, delta } = event;
+      handleResponse(item, delta);
+    });
+
+    clientRef.current.on("close", () => {
+      disconnect();
+    });
+
+    clientRef.current.on("error", (e: any) => {
+      console.error("realtime error:", e);
+      disconnect();
+    });
+
+    clientRef.current.on("conversation.item.completed", (event: any) => {
+      const { item } = event;
+      if (item.type === "message" && item.role === "user") {
+        handleInputAudio(item);
       }
-    } catch (error) {
-      if (clientRef.current) {
-        console.error("Response iteration error:", error);
-      }
-    }
+    });
   };
 
-  const handleResponse = async (response: RTResponse) => {
-    for await (const item of response) {
-      if (item.type === "message" && item.role === "assistant") {
-        const botMessage = createMessage({
-          role: item.role,
-          content: "",
-        });
-        // add bot message first
-        chatStore.updateTargetSession(session, (session) => {
-          session.messages = session.messages.concat([botMessage]);
-        });
-        let hasAudio = false;
-        for await (const content of item) {
-          if (content.type === "text") {
-            for await (const text of content.textChunks()) {
-              botMessage.content += text;
-            }
-          } else if (content.type === "audio") {
-            const textTask = async () => {
-              for await (const text of content.transcriptChunks()) {
-                botMessage.content += text;
-              }
-            };
-            const audioTask = async () => {
-              audioHandlerRef.current?.startStreamingPlayback();
-              for await (const audio of content.audioChunks()) {
-                hasAudio = true;
-                audioHandlerRef.current?.playChunk(audio);
-              }
-            };
-            await Promise.all([textTask(), audioTask()]);
-          }
-          // update message.content
+  const handleResponse = async (
+    item: any,
+    delta: { audio?: Int16Array; transcript?: string } | null,
+  ) => {
+    if (item.type !== "message" || item.role !== "assistant") return;
+    const { id } = item;
+    const botMessage =
+      chatStore.currentSession().messages.find((m) => m.id === id) ??
+      createMessage({
+        id,
+        role: item.role,
+        content: "",
+      });
+    // add bot message first
+    if (!chatStore.currentSession().messages.find((m) => m.id === id)) {
+      chatStore.updateTargetSession(session, (session) => {
+        session.messages = session.messages.concat([botMessage]);
+      });
+    }
+
+    if (delta) {
+      if (delta.transcript) {
+        botMessage.content += delta.transcript;
+      }
+      if (delta.audio) {
+        audioHandlerRef.current?.startStreamingPlayback();
+        audioHandlerRef.current?.playChunk(new Uint8Array(delta.audio.buffer));
+      }
+      // update message.content
+      chatStore.updateTargetSession(session, (session) => {
+        session.messages = session.messages.concat();
+      });
+    } else if (item.status === "completed") {
+      // upload audio get audio_url
+      const blob = audioHandlerRef.current?.savePlayFile();
+      if (blob && blob.size > 0) {
+        uploadImage(blob!).then((audio_url) => {
+          botMessage.audio_url = audio_url;
+          // update text and audio_url
           chatStore.updateTargetSession(session, (session) => {
             session.messages = session.messages.concat();
           });
-        }
-        if (hasAudio) {
-          // upload audio get audio_url
-          const blob = audioHandlerRef.current?.savePlayFile();
-          uploadImage(blob!).then((audio_url) => {
-            botMessage.audio_url = audio_url;
-            // update text and audio_url
-            chatStore.updateTargetSession(session, (session) => {
-              session.messages = session.messages.concat();
-            });
-          });
-        }
+        });
       }
     }
   };
 
-  const handleInputAudio = async (item: RTInputAudioItem) => {
-    await item.waitForCompletion();
-    if (item.transcription) {
+  const handleInputAudio = async (item: any) => {
+    const { text, audio_slice } = item;
+    if (text) {
       const userMessage = createMessage({
         role: "user",
-        content: item.transcription,
+        content: text,
       });
       chatStore.updateTargetSession(session, (session) => {
         session.messages = session.messages.concat([userMessage]);
       });
       // save input audio_url, and update session
-      const { audioStartMillis, audioEndMillis } = item;
+      const { audio_start_ms, audio_end_ms } = audio_slice;
       // upload audio get audio_url
       const blob = audioHandlerRef.current?.saveRecordFile(
-        audioStartMillis,
-        audioEndMillis,
+        audio_start_ms,
+        audio_end_ms,
       );
-      uploadImage(blob!).then((audio_url) => {
-        userMessage.audio_url = audio_url;
-        chatStore.updateTargetSession(session, (session) => {
-          session.messages = session.messages.concat();
+      if (blob && blob.size > 0) {
+        uploadImage(blob!).then((audio_url) => {
+          userMessage.audio_url = audio_url;
+          chatStore.updateTargetSession(session, (session) => {
+            session.messages = session.messages.concat();
+          });
         });
-      });
+      }
     }
     // stop streaming play after get input audio.
     audioHandlerRef.current?.stopStreamingPlayback();
@@ -236,7 +234,7 @@ export function RealtimeChat({
           await audioHandlerRef.current.initialize();
         }
         await audioHandlerRef.current.startRecording(async (chunk) => {
-          await clientRef.current?.sendAudio(chunk);
+          clientRef.current?.appendInputAudio(new Int16Array(chunk.buffer));
         });
         setIsRecording(true);
       } catch (error) {
@@ -246,13 +244,12 @@ export function RealtimeChat({
       try {
         audioHandlerRef.current.stopRecording();
         if (!useVAD) {
-          const inputAudio = await clientRef.current?.commitAudio();
-          await handleInputAudio(inputAudio!);
-          await clientRef.current?.generateResponse();
+          await clientRef.current?.createResponse();
         }
+      } catch (e) {
+        console.error(e);
+      } finally {
         setIsRecording(false);
-      } catch (error) {
-        console.error("Failed to stop recording:", error);
       }
     }
   };
@@ -310,10 +307,10 @@ export function RealtimeChat({
 
   // update session params
   useEffect(() => {
-    clientRef.current?.configure({ voice });
+    clientRef.current?.updateSession({ voice });
   }, [voice]);
   useEffect(() => {
-    clientRef.current?.configure({ temperature });
+    clientRef.current?.updateSession({ temperature });
   }, [temperature]);
 
   const handleClose = async () => {
