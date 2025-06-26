@@ -1,24 +1,14 @@
-import {
-  getMessageTextContent,
-  isDalle3,
-  safeLocalStorage,
-  trimTopic,
-} from "../utils";
+import { getMessageTextContent, safeLocalStorage } from "../utils";
 
 import { indexedDBStorage } from "@/app/utils/indexedDB-storage";
 import { nanoid } from "nanoid";
-import type {
-  ClientApi,
-  MultimodalContent,
-  RequestMessage,
-} from "../client/api";
+import type { MultimodalContent, RequestMessage } from "../client/api";
 import { getClientApi } from "../client/api";
 import { ChatControllerPool } from "../client/controller";
 import { showToast } from "../components/ui-lib";
 import {
   DEFAULT_INPUT_TEMPLATE,
   DEFAULT_MODELS,
-  DEFAULT_SYSTEM_TEMPLATE,
   GEMINI_SUMMARIZE_MODEL,
   DEEPSEEK_SUMMARIZE_MODEL,
   KnowledgeCutOffDate,
@@ -241,38 +231,34 @@ export const useChatStore = createPersistStore(
 
     const methods = {
       forkSession() {
-        // 获取当前会话
         const currentSession = get().currentSession();
         if (!currentSession) return;
 
         const newSession = createEmptySession();
 
         newSession.topic = currentSession.topic;
-        // 深拷贝消息
-        newSession.messages = currentSession.messages.map((msg) => ({
-          ...msg,
-          id: nanoid(), // 生成新的消息 ID
-        }));
-        newSession.mask = {
-          ...currentSession.mask,
-          modelConfig: {
-            ...currentSession.mask.modelConfig,
-          },
-        };
+        newSession.mask = { ...currentSession.mask };
+        newSession.messages = [...currentSession.messages];
+        newSession.memoryPrompt = currentSession.memoryPrompt;
+        newSession.stat = { ...currentSession.stat };
 
-        set((state) => ({
-          currentSessionIndex: 0,
-          sessions: [newSession, ...state.sessions],
-        }));
+        get().selectSession(get().sessions.length);
+
+        set((state) => {
+          newSession.id = nanoid();
+          newSession.lastUpdate = Date.now();
+          state.sessions.push(newSession);
+          return state;
+        });
       },
 
       clearSessions() {
-        set(() => ({
-          sessions: [createEmptySession()],
-          currentSessionIndex: 0,
-        }));
+        set((state) => {
+          state.sessions = [createEmptySession()];
+          state.currentSessionIndex = 0;
+          return state;
+        });
       },
-
       selectSession(index: number) {
         set({
           currentSessionIndex: index,
@@ -281,26 +267,21 @@ export const useChatStore = createPersistStore(
 
       moveSession(from: number, to: number) {
         set((state) => {
-          const { sessions, currentSessionIndex: oldIndex } = state;
+          const { sessions, currentSessionIndex } = state;
 
-          // move the session
-          const newSessions = [...sessions];
-          const session = newSessions[from];
-          newSessions.splice(from, 1);
-          newSessions.splice(to, 0, session);
+          const session = sessions.splice(from, 1)[0];
+          sessions.splice(to, 0, session);
 
-          // modify current session id
-          let newIndex = oldIndex === from ? to : oldIndex;
-          if (oldIndex > from && oldIndex <= to) {
+          let newIndex =
+            currentSessionIndex === from ? to : currentSessionIndex;
+          if (currentSessionIndex > from && currentSessionIndex <= to) {
             newIndex -= 1;
-          } else if (oldIndex < from && oldIndex >= to) {
+          } else if (currentSessionIndex < from && currentSessionIndex >= to) {
             newIndex += 1;
           }
 
-          return {
-            currentSessionIndex: newIndex,
-            sessions: newSessions,
-          };
+          state.currentSessionIndex = newIndex;
+          return state;
         });
       },
 
@@ -308,23 +289,34 @@ export const useChatStore = createPersistStore(
         const session = createEmptySession();
 
         if (mask) {
-          const config = useAppConfig.getState();
-          const globalModelConfig = config.modelConfig;
-
+          const globalModelConfig = useAppConfig.getState().modelConfig;
+          const sessionModelConfig = mask.modelConfig;
           session.mask = {
             ...mask,
+            // a new chat session should not have context - EXCEPT for Emora mask
+            context: String(mask.id) === "100000" ? mask.context : [],
             modelConfig: {
               ...globalModelConfig,
-              ...mask.modelConfig,
+              ...sessionModelConfig,
             },
           };
-          session.topic = mask.name;
+          if (mask.syncGlobalConfig) {
+            session.mask.modelConfig.sendMemory =
+              useAppConfig.getState().modelConfig.sendMemory;
+          }
         }
+        session.topic = session.mask.name;
+        session.memoryPrompt = session.mask.context
+          .map((m) => getMessageTextContent(m))
+          .join("\n");
 
-        set((state) => ({
-          currentSessionIndex: 0,
-          sessions: [session].concat(state.sessions),
-        }));
+        set((state) => {
+          session.id = nanoid();
+          session.lastUpdate = Date.now();
+          state.sessions.unshift(session);
+          state.currentSessionIndex = 0;
+          return state;
+        });
       },
 
       nextSession(delta: number) {
@@ -345,7 +337,7 @@ export const useChatStore = createPersistStore(
 
         const currentIndex = get().currentSessionIndex;
         let nextIndex = Math.min(
-          currentIndex - Number(index < currentIndex),
+          currentIndex - (index < currentIndex ? 1 : 0),
           sessions.length - 1,
         );
 
@@ -354,23 +346,26 @@ export const useChatStore = createPersistStore(
           sessions.push(createEmptySession());
         }
 
-        // for undo delete action
-        const restoreState = {
-          currentSessionIndex: get().currentSessionIndex,
-          sessions: get().sessions.slice(),
-        };
+        // for undo delete
+        const lastSessions = get().sessions.slice();
+        const lastIndex = get().currentSessionIndex;
 
-        set(() => ({
-          currentSessionIndex: nextIndex,
-          sessions,
-        }));
+        set((state) => {
+          state.sessions = sessions;
+          state.currentSessionIndex = nextIndex;
+          return state;
+        });
 
         showToast(
           Locale.Home.DeleteToast,
           {
             text: Locale.Home.Revert,
             onClick() {
-              set(() => restoreState);
+              set((state) => {
+                state.sessions = lastSessions;
+                state.currentSessionIndex = lastIndex;
+                return state;
+              });
             },
           },
           5000,
@@ -382,8 +377,11 @@ export const useChatStore = createPersistStore(
         const sessions = get().sessions;
 
         if (index < 0 || index >= sessions.length) {
-          index = Math.min(sessions.length - 1, Math.max(0, index));
-          set(() => ({ currentSessionIndex: index }));
+          index = Math.max(0, Math.min(index, sessions.length - 1));
+          set((state) => {
+            state.currentSessionIndex = index;
+            return state;
+          });
         }
 
         const session = sessions[index];
@@ -392,15 +390,9 @@ export const useChatStore = createPersistStore(
       },
 
       onNewMessage(message: ChatMessage, targetSession: ChatSession) {
-        get().updateTargetSession(targetSession, (session) => {
-          session.messages = session.messages.concat();
-          session.lastUpdate = Date.now();
-        });
-
+        targetSession.messages.push(message);
+        targetSession.lastUpdate = Date.now();
         get().updateStat(message, targetSession);
-
-        get().checkMcpJson(message);
-
         get().summarizeSession(false, targetSession);
       },
 
@@ -412,91 +404,104 @@ export const useChatStore = createPersistStore(
         const session = get().currentSession();
         const modelConfig = session.mask.modelConfig;
 
-        // MCP Response no need to fill template
-        let mContent: string | MultimodalContent[] = isMcpResponse
-          ? content
-          : fillTemplateWith(content, modelConfig);
-
-        if (!isMcpResponse && attachImages && attachImages.length > 0) {
-          mContent = [
-            ...(content ? [{ type: "text" as const, text: content }] : []),
-            ...attachImages.map((url) => ({
-              type: "image_url" as const,
-              image_url: { url },
-            })),
-          ];
-        }
-
-        let userMessage: ChatMessage = createMessage({
+        const userMessage: ChatMessage = createMessage({
           role: "user",
-          content: mContent,
-          isMcpResponse,
+          content: content,
         });
+        if (attachImages && attachImages.length > 0) {
+          const multimodalContent: MultimodalContent[] = [];
+          for (const url of attachImages) {
+            multimodalContent.push({
+              type: "image_url",
+              image_url: {
+                url: url,
+              },
+            });
+          }
+          userMessage.content = multimodalContent;
+        }
 
         const botMessage: ChatMessage = createMessage({
           role: "assistant",
           streaming: true,
           model: modelConfig.model,
+          isMcpResponse: isMcpResponse,
         });
 
-        // get recent messages
+        // get all messages for this session
         const recentMessages = await get().getMessagesWithMemory();
-        const sendMessages = recentMessages.concat(userMessage);
-        const messageIndex = session.messages.length + 1;
+        const allMessages = recentMessages.concat(userMessage);
+        const clientApi = getClientApi(modelConfig.providerName);
+        const controller = new AbortController();
+        const { signal } = controller;
 
-        // save user's and bot's message
-        get().updateTargetSession(session, (session) => {
-          const savedUserMessage = {
-            ...userMessage,
-            content: mContent,
-          };
-          session.messages = session.messages.concat([
-            savedUserMessage,
-            botMessage,
-          ]);
-        });
-
-        const api: ClientApi = getClientApi(modelConfig.providerName);
-        // make request
-        api.llm.chat({
-          messages: sendMessages,
-          config: { ...modelConfig, stream: true },
-          onUpdate(message) {
-            botMessage.streaming = true;
-            if (message) {
-              botMessage.content = message;
-            }
-            get().updateTargetSession(session, (session) => {
-              session.messages = session.messages.concat();
-            });
+        const chatPayload = {
+          messages: allMessages,
+          config: {
+            ...modelConfig,
+            stream: true,
+            providerName: modelConfig.providerName,
           },
-          async onFinish(message) {
+          onUpdate(message: string) {
+            botMessage.streaming = true;
+            if (message) botMessage.content = message;
+            get().updateMessage(
+              get().currentSessionIndex,
+              botMessage.id,
+              (msg) => {
+                if (msg) msg.content = message;
+              },
+            );
+          },
+          async onFinish(message: string, responseRes: any) {
             botMessage.streaming = false;
-            if (message) {
-              botMessage.content = message;
-              botMessage.date = new Date().toLocaleString();
-              get().onNewMessage(botMessage, session);
-            }
+            if (message) botMessage.content = message;
+            if (responseRes?.audio_url)
+              botMessage.audio_url = responseRes?.audio_url;
+            get().updateMessage(
+              get().currentSessionIndex,
+              botMessage.id,
+              (msg) => {
+                if (msg) {
+                  msg.streaming = false;
+                  if (message) msg.content = message;
+                  if (responseRes?.audio_url)
+                    msg.audio_url = responseRes?.audio_url;
+                }
+              },
+            );
             ChatControllerPool.remove(session.id, botMessage.id);
+
+            // check mcp-json format
+            if (!isMcpResponse && isMcpJson(message))
+              await get().checkMcpJson(botMessage);
           },
           onBeforeTool(tool: ChatMessageTool) {
-            (botMessage.tools = botMessage?.tools || []).push(tool);
-            get().updateTargetSession(session, (session) => {
-              session.messages = session.messages.concat();
-            });
+            get().updateMessage(
+              get().currentSessionIndex,
+              botMessage.id,
+              (msg) => {
+                if (!msg) return;
+                if (!msg.tools) msg.tools = [];
+                msg.tools.push(tool);
+              },
+            );
           },
           onAfterTool(tool: ChatMessageTool) {
-            botMessage?.tools?.forEach((t, i, tools) => {
-              if (tool.id == t.id) {
-                tools[i] = { ...tool };
-              }
-            });
-            get().updateTargetSession(session, (session) => {
-              session.messages = session.messages.concat();
-            });
+            get().updateMessage(
+              get().currentSessionIndex,
+              botMessage.id,
+              (msg) => {
+                if (!msg) return;
+                if (!msg.tools) return;
+                const index = msg.tools.findIndex((t) => t.id === tool.id);
+                if (index === -1) return;
+                msg.tools[index] = tool;
+              },
+            );
           },
-          onError(error) {
-            const isAborted = error.message?.includes?.("aborted");
+          onError(error: Error) {
+            const isAborted = error.message.includes("aborted");
             botMessage.content +=
               "\n\n" +
               prettyObject({
@@ -506,148 +511,116 @@ export const useChatStore = createPersistStore(
             botMessage.streaming = false;
             userMessage.isError = !isAborted;
             botMessage.isError = !isAborted;
-            get().updateTargetSession(session, (session) => {
-              session.messages = session.messages.concat();
-            });
-            ChatControllerPool.remove(
-              session.id,
-              botMessage.id ?? messageIndex,
+            get().updateMessage(
+              get().currentSessionIndex,
+              botMessage.id,
+              (msg) => {
+                if (msg) {
+                  msg.content = botMessage.content;
+                  msg.isError = !isAborted;
+                }
+              },
             );
+            ChatControllerPool.remove(session.id, botMessage.id);
 
             console.error("[Chat] failed ", error);
           },
-          onController(controller) {
-            // collect controller for stop/retry
+          onController(controller: AbortController) {
+            // Attach the controller to the session id
             ChatControllerPool.addController(
               session.id,
-              botMessage.id ?? messageIndex,
+              botMessage.id,
               controller,
             );
           },
-        });
+        };
+        // client side call a api to chat
+        get().onNewMessage(userMessage, session);
+        get().onNewMessage(botMessage, session);
+        await clientApi.llm.chat(chatPayload);
       },
 
       getMemoryPrompt() {
         const session = get().currentSession();
 
-        if (session.memoryPrompt.length) {
-          return {
-            role: "system",
-            content: Locale.Store.Prompt.History(session.memoryPrompt),
-            date: "",
-          } as ChatMessage;
-        }
+        return {
+          role: "system",
+          content:
+            session.memoryPrompt.length > 0
+              ? Locale.Store.Prompt.History(session.memoryPrompt)
+              : "",
+          date: "",
+        } as ChatMessage;
       },
-
       async getMessagesWithMemory() {
         const session = get().currentSession();
         const modelConfig = session.mask.modelConfig;
-        const clearContextIndex = session.clearContextIndex ?? 0;
-        const messages = session.messages.slice();
-        const totalMessageCount = session.messages.length;
+        const config = useAppConfig.getState();
 
-        // in-context prompts
-        const contextPrompts = session.mask.context.slice();
-
-        // system prompts, to get close to OpenAI Web ChatGPT
-        const shouldInjectSystemPrompts =
+        // some models do not support system prompt, write it in user prompt
+        const systemPrompt =
           modelConfig.enableInjectSystemPrompts &&
-          (session.mask.modelConfig.model.startsWith("gpt-") ||
-            session.mask.modelConfig.model.startsWith("chatgpt-"));
-
-        const mcpEnabled = await isMcpEnabled();
-        const mcpSystemPrompt = mcpEnabled ? await getMcpSystemPrompt() : "";
-
-        var systemPrompts: ChatMessage[] = [];
-
-        if (shouldInjectSystemPrompts) {
-          systemPrompts = [
-            createMessage({
-              role: "system",
-              content:
-                fillTemplateWith("", {
-                  ...modelConfig,
-                  template: DEFAULT_SYSTEM_TEMPLATE,
-                }) + mcpSystemPrompt,
-            }),
-          ];
-        } else if (mcpEnabled) {
-          systemPrompts = [
-            createMessage({
-              role: "system",
-              content: mcpSystemPrompt,
-            }),
-          ];
-        }
-
-        if (shouldInjectSystemPrompts || mcpEnabled) {
-          console.log(
-            "[Global System Prompt] ",
-            systemPrompts.at(0)?.content ?? "empty",
-          );
-        }
+          session.mask.context.length > 0
+            ? session.mask.context
+            : [];
         const memoryPrompt = get().getMemoryPrompt();
-        // long term memory
-        const shouldSendLongTermMemory =
-          modelConfig.sendMemory &&
-          session.memoryPrompt &&
-          session.memoryPrompt.length > 0 &&
-          session.lastSummarizeIndex > clearContextIndex;
-        const longTermMemoryPrompts =
-          shouldSendLongTermMemory && memoryPrompt ? [memoryPrompt] : [];
-        const longTermMemoryStartIndex = session.lastSummarizeIndex;
-
-        // short term memory
-        const shortTermMemoryStartIndex = Math.max(
-          0,
-          totalMessageCount - modelConfig.historyMessageCount,
-        );
-
-        // lets concat send messages, including 4 parts:
-        // 0. system prompt: to get close to OpenAI Web ChatGPT
-        // 1. long term memory: summarized memory messages
-        // 2. pre-defined in-context prompts
-        // 3. short term memory: latest n messages
-        // 4. newest input message
-        const memoryStartIndex = shouldSendLongTermMemory
-          ? Math.min(longTermMemoryStartIndex, shortTermMemoryStartIndex)
-          : shortTermMemoryStartIndex;
-        // and if user has cleared history messages, we should exclude the memory too.
-        const contextStartIndex = Math.max(clearContextIndex, memoryStartIndex);
-        const maxTokenThreshold = modelConfig.max_tokens;
-
-        // get recent messages as much as possible
-        const reversedRecentMessages = [];
-        for (
-          let i = totalMessageCount - 1, tokenCount = 0;
-          i >= contextStartIndex && tokenCount < maxTokenThreshold;
-          i -= 1
-        ) {
-          const msg = messages[i];
-          if (!msg || msg.isError) continue;
-          tokenCount += estimateTokenLength(getMessageTextContent(msg));
-          reversedRecentMessages.push(msg);
+        if (memoryPrompt.content.length > 0) {
+          memoryPrompt.content =
+            memoryPrompt.content + "\n" + (await getMcpSystemPrompt());
+        } else {
+          memoryPrompt.content = await getMcpSystemPrompt();
         }
-        // concat all messages
-        const recentMessages = [
-          ...systemPrompts,
-          ...longTermMemoryPrompts,
-          ...contextPrompts,
-          ...reversedRecentMessages.reverse(),
-        ];
+        const chatMemos = session.mask.context
+          .slice()
+          .concat(memoryPrompt.content.length > 0 ? memoryPrompt : []);
+        const limit = config.modelConfig.historyMessageCount;
+        const recentMessages = session.messages.slice(-limit).map(async (m) => {
+          if (m.role === "user" && (await isMcpEnabled())) {
+            const messageContent =
+              typeof m.content === "string"
+                ? m.content
+                : getMessageTextContent(m);
+            return {
+              ...m,
+              content: fillTemplateWith(messageContent, modelConfig),
+            };
+          }
+          return m;
+        });
 
-        return recentMessages;
+        // Wait for all async operations to complete
+        const resolvedRecentMessages = await Promise.all(recentMessages);
+
+        // see discussion point 2 here: https://github.com/orgs/Yidadaa/discussions/1070
+        const recentMessagesWithCutoff = resolvedRecentMessages.filter(
+          (m) =>
+            !m.date ||
+            (m.date &&
+              new Date(m.date) >
+                new Date(
+                  new Date().setDate(
+                    new Date().getDate() -
+                      config.modelConfig.historyMessageCount,
+                  ),
+                )),
+        );
+        const sendMessages = chatMemos.concat(recentMessagesWithCutoff);
+
+        return sendMessages;
       },
 
       updateMessage(
         sessionIndex: number,
-        messageIndex: number,
+        messageId: string,
         updater: (message?: ChatMessage) => void,
       ) {
         const sessions = get().sessions;
-        const session = sessions.at(sessionIndex);
-        const messages = session?.messages;
-        updater(messages?.at(messageIndex));
+        const session = sessions[sessionIndex];
+        const messageIndex = session.messages.findIndex(
+          (m) => m.id === messageId,
+        );
+        if (messageIndex < 0) return;
+        updater(session.messages[messageIndex]);
         set(() => ({ sessions }));
       },
 
@@ -662,270 +635,244 @@ export const useChatStore = createPersistStore(
         refreshTitle: boolean = false,
         targetSession: ChatSession,
       ) {
-        const config = useAppConfig.getState();
         const session = targetSession;
         const modelConfig = session.mask.modelConfig;
-        // skip summarize when using dalle3?
-        if (isDalle3(modelConfig.model)) {
+        const config = useAppConfig.getState();
+
+        let PADDING_MESSAGE_COUNT = 4;
+        const messages = session.messages;
+
+        // some models do not support system prompt, write it in user prompt
+        const systemPrompt =
+          modelConfig.enableInjectSystemPrompts &&
+          session.mask.context.length > 0
+            ? session.mask.context
+                .map((m) => m.content)
+                .join("\n")
+                .trim()
+            : "";
+
+        if (
+          messages.length <=
+            session.lastSummarizeIndex + PADDING_MESSAGE_COUNT &&
+          !refreshTitle
+        )
+          return;
+
+        const memoryPrompt = get().getMemoryPrompt();
+
+        let newTopic = session.topic;
+        const earlyMsgs = session.messages.slice(0, session.lastSummarizeIndex);
+        const recentMsgs = session.messages.slice(session.lastSummarizeIndex);
+
+        let summarized = session.memoryPrompt;
+
+        const [summarizeModel, summarizeProvider] = getSummarizeModel(
+          modelConfig.model,
+          (modelConfig.providerName as string) ?? ServiceProvider.OpenAI,
+        );
+
+        if (
+          !summarizeModel ||
+          (config.modelConfig.compressMessageLengthThreshold &&
+            session.topic !== DEFAULT_TOPIC &&
+            !refreshTitle)
+        ) {
+          // just store recent messages
+          session.memoryPrompt = summarized.length > 0 ? summarized : "";
           return;
         }
 
-        // if not config compressModel, then using getSummarizeModel
-        const [model, providerName] = modelConfig.compressModel
-          ? [modelConfig.compressModel, modelConfig.compressProviderName]
-          : getSummarizeModel(
-              session.mask.modelConfig.model,
-              session.mask.modelConfig.providerName,
-            );
-        const api: ClientApi = getClientApi(providerName as ServiceProvider);
+        const tokens = countMessages(recentMsgs);
+        const maxTokens = config.modelConfig.max_tokens;
 
-        // remove error messages if any
-        const messages = session.messages;
+        // do not summarize if tokens are not enough
+        if (tokens < maxTokens * 0.3 && !refreshTitle) return;
 
-        // should summarize topic after chating more than 50 words
-        const SUMMARIZE_MIN_LEN = 50;
-        if (
-          (config.enableAutoGenerateTitle &&
-            session.topic === DEFAULT_TOPIC &&
-            countMessages(messages) >= SUMMARIZE_MIN_LEN) ||
-          refreshTitle
-        ) {
-          const startIndex = Math.max(
-            0,
-            messages.length - modelConfig.historyMessageCount,
-          );
-          const topicMessages = messages
-            .slice(
-              startIndex < messages.length ? startIndex : messages.length - 1,
-              messages.length,
-            )
-            .concat(
-              createMessage({
-                role: "user",
-                content: Locale.Store.Prompt.Topic,
-              }),
-            );
-          api.llm.chat({
-            messages: topicMessages,
-            config: {
-              model,
-              stream: false,
-              providerName,
-            },
-            onFinish(message, responseRes) {
-              if (responseRes?.status === 200) {
-                get().updateTargetSession(
-                  session,
-                  (session) =>
-                    (session.topic =
-                      message.length > 0 ? trimTopic(message) : DEFAULT_TOPIC),
-                );
-              }
-            },
-          });
-        }
-        const summarizeIndex = Math.max(
-          session.lastSummarizeIndex,
-          session.clearContextIndex ?? 0,
-        );
-        let toBeSummarizedMsgs = messages
-          .filter((msg) => !msg.isError)
-          .slice(summarizeIndex);
-
-        const historyMsgLength = countMessages(toBeSummarizedMsgs);
-
-        if (historyMsgLength > (modelConfig?.max_tokens || 4000)) {
-          const n = toBeSummarizedMsgs.length;
-          toBeSummarizedMsgs = toBeSummarizedMsgs.slice(
-            Math.max(0, n - modelConfig.historyMessageCount),
-          );
-        }
-        const memoryPrompt = get().getMemoryPrompt();
-        if (memoryPrompt) {
-          // add memory prompt
-          toBeSummarizedMsgs.unshift(memoryPrompt);
+        // add a word limit to memory prompt
+        const memoryLimit = 4000;
+        if (summarized.length > memoryLimit) {
+          summarized = summarized.slice(summarized.length - memoryLimit);
         }
 
-        const lastSummarizeIndex = session.messages.length;
+        const client = getClientApi(summarizeProvider as ServiceProvider);
+        const controller = new AbortController();
+        const { signal } = controller;
 
-        console.log(
-          "[Chat History] ",
-          toBeSummarizedMsgs,
-          historyMsgLength,
-          modelConfig.compressMessageLengthThreshold,
-        );
+        const rawMessages = recentMsgs.map((m) => ({
+          role: m.role,
+          content: getMessageTextContent(m),
+        }));
 
-        if (
-          historyMsgLength > modelConfig.compressMessageLengthThreshold &&
-          modelConfig.sendMemory
-        ) {
-          /** Destruct max_tokens while summarizing
-           * this param is just shit
-           **/
-          const { max_tokens, ...modelcfg } = modelConfig;
-          api.llm.chat({
-            messages: toBeSummarizedMsgs.concat(
-              createMessage({
-                role: "system",
-                content: Locale.Store.Prompt.Summarize,
-                date: "",
-              }),
-            ),
-            config: {
-              ...modelcfg,
-              stream: true,
-              model,
-              providerName,
-            },
-            onUpdate(message) {
-              session.memoryPrompt = message;
-            },
-            onFinish(message, responseRes) {
-              if (responseRes?.status === 200) {
-                console.log("[Memory] ", message);
-                get().updateTargetSession(session, (session) => {
-                  session.lastSummarizeIndex = lastSummarizeIndex;
-                  session.memoryPrompt = message; // Update the memory prompt for stored it in local storage
-                });
-              }
-            },
-            onError(err) {
-              console.error("[Summarize] ", err);
-            },
-          });
-        }
+        const chatPayload = {
+          messages: [
+            ...systemPrompt,
+            ...earlyMsgs,
+            memoryPrompt,
+            ...rawMessages,
+          ].map((m: any) => ({
+            role: m.role,
+            content: getMessageTextContent(m),
+          })),
+          config: {
+            model: summarizeModel,
+            stream: false,
+            temperature: 0.1,
+            providerName: summarizeProvider,
+          },
+          onUpdate(message: string) {},
+          async onFinish(message: string, responseRes: any) {
+            let memoryContent = "";
+            let topic = session.topic;
+
+            if (message.includes("记忆：")) {
+              const splited = message.split("记忆：");
+              topic = splited[0].replace("标题：", "").trim();
+              memoryContent = splited[1].trim();
+            } else {
+              memoryContent = message;
+            }
+
+            // console.log("[summary] topic: ", topic, "memory: ", memoryContent);
+            get().updateTargetSession(session, (session) => {
+              session.topic = topic;
+              session.memoryPrompt = memoryContent;
+              session.lastSummarizeIndex = session.messages.length;
+            });
+            if (refreshTitle) {
+              showToast(`标题已更新: ${topic}`);
+            }
+          },
+          onError(err: Error) {
+            console.error("[summarize] failed", err);
+          },
+          onController(controller: AbortController) {},
+        };
+        client.llm.chat(chatPayload);
       },
 
       updateStat(message: ChatMessage, session: ChatSession) {
-        get().updateTargetSession(session, (session) => {
-          session.stat.charCount += message.content.length;
-          // TODO: should update chat count and word count
-        });
+        const messageContent = getMessageTextContent(message);
+        session.stat.charCount += messageContent.length;
+        // TODO: should be improved
+        session.stat.wordCount = session.stat.charCount / 2;
+        session.stat.tokenCount = estimateTokenLength(messageContent);
       },
+
       updateTargetSession(
         targetSession: ChatSession,
         updater: (session: ChatSession) => void,
       ) {
-        const sessions = get().sessions;
+        const sessions = get().sessions.slice();
         const index = sessions.findIndex((s) => s.id === targetSession.id);
-        if (index < 0) return;
-        updater(sessions[index]);
+        if (index === -1) return;
+        const session = sessions[index];
+        updater(session);
         set(() => ({ sessions }));
       },
       async clearAllData() {
-        await indexedDBStorage.clear();
-        localStorage.clear();
-        location.reload();
+        if (confirm(Locale.Settings.Danger.Clear.Confirm)) {
+          await indexedDBStorage.clear();
+          localStorage.clear();
+          location.reload();
+        }
       },
       setLastInput(lastInput: string) {
-        set({
-          lastInput,
-        });
+        set({ lastInput });
+      },
+      getLastInput() {
+        return get().lastInput;
       },
 
-      /** check if the message contains MCP JSON and execute the MCP action */
-      checkMcpJson(message: ChatMessage) {
-        const mcpEnabled = isMcpEnabled();
-        if (!mcpEnabled) return;
-        const content = getMessageTextContent(message);
-        if (isMcpJson(content)) {
-          try {
-            const mcpRequest = extractMcpJson(content);
-            if (mcpRequest) {
-              console.debug("[MCP Request]", mcpRequest);
+      async checkMcpJson(message: ChatMessage) {
+        const session = get().currentSession();
 
-              executeMcpAction(mcpRequest.clientId, mcpRequest.mcp)
-                .then((result) => {
-                  console.log("[MCP Response]", result);
-                  const mcpResponse =
-                    typeof result === "object"
-                      ? JSON.stringify(result)
-                      : String(result);
-                  get().onUserInput(
-                    `\`\`\`json:mcp-response:${mcpRequest.clientId}\n${mcpResponse}\n\`\`\``,
-                    [],
-                    true,
-                  );
-                })
-                .catch((error) => showToast("MCP execution failed", error));
-            }
-          } catch (error) {
-            console.error("[Check MCP JSON]", error);
-          }
-        }
+        const mcpActionJson = extractMcpJson(getMessageTextContent(message));
+        if (!mcpActionJson) return;
+
+        const { clientId, mcp } = mcpActionJson;
+        const action = mcp?.action;
+        const params = mcp?.params;
+        const think = mcp?.think;
+
+        if (!action || !params) return;
+
+        const executeThinkContent = `我将执行一个Mcp Action:
+\`\`\`json
+${JSON.stringify({ action, params }, null, 2)}
+\`\`\`
+${think || ""}`;
+
+        const botMessage: ChatMessage = createMessage({
+          role: "assistant",
+          content: executeThinkContent,
+          isMcpResponse: true,
+        });
+
+        get().onNewMessage(botMessage, session);
+
+        await executeMcpAction(action, params);
       },
     };
 
-    return methods;
+    return {
+      ...DEFAULT_CHAT_STATE,
+      ...methods,
+      get,
+    };
   },
   {
     name: StoreKey.Chat,
-    version: 3.3,
+    version: 3.1,
     migrate(persistedState, version) {
       const state = persistedState as any;
-      const newState = JSON.parse(
-        JSON.stringify(state),
-      ) as typeof DEFAULT_CHAT_STATE;
-
       if (version < 2) {
-        newState.sessions = [];
-
-        const oldSessions = state.sessions;
-        for (const oldSession of oldSessions) {
-          const newSession = createEmptySession();
-          newSession.topic = oldSession.topic;
-          newSession.messages = [...oldSession.messages];
-          newSession.mask.modelConfig.sendMemory = true;
-          newSession.mask.modelConfig.historyMessageCount = 4;
-          newSession.mask.modelConfig.compressMessageLengthThreshold = 1000;
-          newState.sessions.push(newSession);
-        }
+        state.sessions.forEach((s: ChatSession) => {
+          s.mask.modelConfig = {
+            ...useAppConfig.getState().modelConfig,
+            ...s.mask.modelConfig,
+          };
+          s.mask.modelConfig.sendMemory = true;
+          // make sure all sessions' modelConfig has sendMemory
+        });
       }
-
       if (version < 3) {
-        // migrate id to nanoid
-        newState.sessions.forEach((s) => {
-          s.id = nanoid();
-          s.messages.forEach((m) => (m.id = nanoid()));
+        state.sessions.forEach((s: ChatSession) => {
+          s.messages.forEach((m: ChatMessage) => {
+            if (m.date) return;
+            m.date = new Date().toLocaleString();
+          });
         });
       }
-
-      // Enable `enableInjectSystemPrompts` attribute for old sessions.
-      // Resolve issue of old sessions not automatically enabling.
       if (version < 3.1) {
-        newState.sessions.forEach((s) => {
-          if (
-            // Exclude those already set by user
-            !s.mask.modelConfig.hasOwnProperty("enableInjectSystemPrompts")
-          ) {
-            // Because users may have changed this configuration,
-            // the user's current configuration is used instead of the default
-            const config = useAppConfig.getState();
-            s.mask.modelConfig.enableInjectSystemPrompts =
-              config.modelConfig.enableInjectSystemPrompts;
-          }
+        state.sessions.forEach((s: ChatSession) => {
+          if (s.mask.modelConfig.providerName) return;
+          const modelName = s.mask.modelConfig.model;
+          const provider = collectModelsWithDefaultModel(
+            useAppConfig.getState().models,
+            [
+              useAppConfig.getState().customModels,
+              useAccessStore.getState().customModels,
+            ].join(","),
+            useAccessStore.getState().defaultModel,
+          ).find((m) => m.name === modelName)?.provider;
+          s.mask.modelConfig.providerName =
+            (provider?.providerName as ServiceProvider) ??
+            ServiceProvider.OpenAI;
         });
       }
 
-      // add default summarize model for every session
-      if (version < 3.2) {
-        newState.sessions.forEach((s) => {
-          const config = useAppConfig.getState();
-          s.mask.modelConfig.compressModel = config.modelConfig.compressModel;
-          s.mask.modelConfig.compressProviderName =
-            config.modelConfig.compressProviderName;
-        });
+      return state as any;
+    },
+    onRehydrateStorage: (state) => {
+      if (state) {
+        // Use setTimeout to avoid accessing useChatStore before initialization
+        setTimeout(() => {
+          useChatStore.setState({
+            lastInput: state.lastInput,
+          });
+        }, 0);
       }
-      // revert default summarize model for every session
-      if (version < 3.3) {
-        newState.sessions.forEach((s) => {
-          const config = useAppConfig.getState();
-          s.mask.modelConfig.compressModel = "";
-          s.mask.modelConfig.compressProviderName = "";
-        });
-      }
-
-      return newState as any;
     },
   },
 );

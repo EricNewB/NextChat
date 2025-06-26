@@ -347,3 +347,12 @@
 .rtl-screen {
   direction: rtl;
 }
+
+.home {
+  display: flex;
+  height: 100%;
+}
+
+.hide-button {
+  display: none !important;
+}

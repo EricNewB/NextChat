@@ -130,6 +130,7 @@ export enum ServiceProvider {
   ChatGLM = "ChatGLM",
   DeepSeek = "DeepSeek",
   SiliconFlow = "SiliconFlow",
+  Grok = "Grok",
 }
 
 // Google API safety settings, see https://ai.google.dev/gemini-api/docs/safety-settings
@@ -858,3 +859,8 @@ export const DEFAULT_GA_ID = "G-89WN60ZK2E";
 
 export const SAAS_CHAT_URL = "https://nextchat.club";
 export const SAAS_CHAT_UTM_URL = "https://nextchat.club?utm=github";
+
+export const ModelProviderMap: Record<string, ServiceProvider> = {
+  "gpt-4o": ServiceProvider.OpenAI,
+  // ... existing code ...
+};

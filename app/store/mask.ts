@@ -11,7 +11,7 @@ export type Mask = {
   createdAt: number;
   avatar: string;
   name: string;
-  hideContext?: boolean;
+  hideContext?: true;
   context: ChatMessage[];
   syncGlobalConfig?: boolean;
   modelConfig: ModelConfig;
@@ -90,7 +90,6 @@ export const useMaskStore = createPersistStore(
         (a, b) => b.createdAt - a.createdAt,
       );
       const config = useAppConfig.getState();
-      if (config.hideBuiltinMasks) return userMasks;
       const buildinMasks = BUILTIN_MASKS.map(
         (m) =>
           ({
@@ -101,7 +100,7 @@ export const useMaskStore = createPersistStore(
             },
           }) as Mask,
       );
-      return userMasks.concat(buildinMasks);
+      return buildinMasks;
     },
     search(text: string) {
       return Object.values(get().masks);

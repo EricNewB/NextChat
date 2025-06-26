@@ -4,10 +4,8 @@ import styles from "./home.module.scss";
 
 import { IconButton } from "./button";
 import SettingsIcon from "../icons/settings.svg";
-import GithubIcon from "../icons/github.svg";
 import ChatGptIcon from "../icons/chatgpt.svg";
 import AddIcon from "../icons/add.svg";
-import DeleteIcon from "../icons/delete.svg";
 import MaskIcon from "../icons/mask.svg";
 import McpIcon from "../icons/mcp.svg";
 import DragIcon from "../icons/drag.svg";
@@ -16,6 +14,7 @@ import DiscoveryIcon from "../icons/discovery.svg";
 import Locale from "../locales";
 
 import { useAppConfig, useChatStore } from "../store";
+import { useMaskStore } from "../store/mask";
 
 import {
   DEFAULT_SIDEBAR_WIDTH,
@@ -23,15 +22,15 @@ import {
   MIN_SIDEBAR_WIDTH,
   NARROW_SIDEBAR_WIDTH,
   Path,
-  REPO_URL,
 } from "../constant";
 
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { isIOS, useMobileScreen } from "../utils";
 import dynamic from "next/dynamic";
-import { Selector, showConfirm } from "./ui-lib";
+import { Selector } from "./ui-lib";
 import clsx from "clsx";
 import { isMcpEnabled } from "../mcp/actions";
+import { BUILTIN_MASK_STORE } from "../masks";
 
 const DISCOVERY = [
   { name: Locale.Plugin.Name, path: Path.Plugins },
@@ -231,6 +230,7 @@ export function SideBar(props: { className?: string }) {
   const navigate = useNavigate();
   const config = useAppConfig();
   const chatStore = useChatStore();
+  const maskStore = useMaskStore();
   const [mcpEnabled, setMcpEnabled] = useState(false);
 
   useEffect(() => {
@@ -259,34 +259,47 @@ export function SideBar(props: { className?: string }) {
           <IconButton
             icon={<MaskIcon />}
             text={shouldNarrow ? undefined : Locale.Mask.Name}
-            className={styles["sidebar-bar-button"]}
+            className={clsx(
+              styles["sidebar-bar-button"],
+              styles["hide-button"],
+            )}
             onClick={() => {
-              if (config.dontShowMaskSplashScreen !== true) {
-                navigate(Path.NewChat, { state: { fromHome: true } });
-              } else {
-                navigate(Path.Masks, { state: { fromHome: true } });
+              if (config.dontShowMaskSplashScreen) {
+                const emoraMask = BUILTIN_MASK_STORE.get("100000");
+                if (emoraMask) {
+                  chatStore.newSession(emoraMask);
+                  navigate(Path.Chat);
+                } else {
+                  navigate(Path.Masks);
+                }
+                return;
               }
+              navigate(Path.NewChat, { state: { fromHome: true } });
             }}
             shadow
           />
-          {mcpEnabled && (
+          {mcpEnabled ? (
             <IconButton
               icon={<McpIcon />}
               text={shouldNarrow ? undefined : Locale.Mcp.Name}
               className={styles["sidebar-bar-button"]}
-              onClick={() => {
-                navigate(Path.McpMarket, { state: { fromHome: true } });
-              }}
+              onClick={() =>
+                navigate(Path.McpMarket, { state: { fromHome: true } })
+              }
+              shadow
+            />
+          ) : (
+            <IconButton
+              icon={<DiscoveryIcon />}
+              text={shouldNarrow ? undefined : Locale.Discovery.Name}
+              className={clsx(
+                styles["sidebar-bar-button"],
+                styles["hide-button"],
+              )}
+              onClick={() => setshowDiscoverySelector(true)}
               shadow
             />
           )}
-          <IconButton
-            icon={<DiscoveryIcon />}
-            text={shouldNarrow ? undefined : Locale.Discovery.Name}
-            className={styles["sidebar-bar-button"]}
-            onClick={() => setshowDiscoverySelector(true)}
-            shadow
-          />
         </div>
         {showDiscoverySelector && (
           <Selector
@@ -314,55 +327,63 @@ export function SideBar(props: { className?: string }) {
       >
         <ChatList narrow={shouldNarrow} />
       </SideBarBody>
-      <SideBarTail
-        primaryAction={
-          <>
-            <div className={clsx(styles["sidebar-action"], styles.mobile)}>
-              <IconButton
-                icon={<DeleteIcon />}
-                onClick={async () => {
-                  if (await showConfirm(Locale.Home.DeleteChat)) {
-                    chatStore.deleteSession(chatStore.currentSessionIndex);
-                  }
-                }}
-              />
-            </div>
-            <div className={styles["sidebar-action"]}>
-              <Link to={Path.Settings}>
-                <IconButton
-                  aria={Locale.Settings.Title}
-                  icon={<SettingsIcon />}
-                  shadow
-                />
-              </Link>
-            </div>
-            <div className={styles["sidebar-action"]}>
-              <a href={REPO_URL} target="_blank" rel="noopener noreferrer">
-                <IconButton
-                  aria={Locale.Export.MessageFromChatGPT}
-                  icon={<GithubIcon />}
-                  shadow
-                />
-              </a>
-            </div>
-          </>
-        }
-        secondaryAction={
-          <IconButton
-            icon={<AddIcon />}
-            text={shouldNarrow ? undefined : Locale.Home.NewChat}
-            onClick={() => {
-              if (config.dontShowMaskSplashScreen) {
-                chatStore.newSession();
-                navigate(Path.Chat);
-              } else {
-                navigate(Path.NewChat);
-              }
-            }}
-            shadow
-          />
-        }
-      />
+      {mcpEnabled ? (
+        <SideBarTail
+          primaryAction={
+            <IconButton
+              icon={<SettingsIcon />}
+              text={shouldNarrow ? undefined : Locale.Settings.Title}
+              onClick={() => {
+                navigate(Path.Settings);
+              }}
+              shadow
+            />
+          }
+          secondaryAction={
+            <IconButton
+              icon={<AddIcon />}
+              text={shouldNarrow ? undefined : Locale.Home.NewChat}
+              className={clsx(styles["sidebar-bar-button"])}
+              onClick={() => {
+                const emoraMask = BUILTIN_MASK_STORE.get("100000");
+                if (emoraMask) {
+                  chatStore.newSession(emoraMask);
+                  navigate(Path.Chat);
+                }
+              }}
+              shadow
+            />
+          }
+        />
+      ) : (
+        <SideBarTail
+          primaryAction={
+            <IconButton
+              icon={<AddIcon />}
+              text={shouldNarrow ? undefined : Locale.Home.NewChat}
+              className={clsx(styles["sidebar-bar-button"])}
+              onClick={() => {
+                const emoraMask = BUILTIN_MASK_STORE.get("100000");
+                if (emoraMask) {
+                  chatStore.newSession(emoraMask);
+                  navigate(Path.Chat);
+                }
+              }}
+              shadow
+            />
+          }
+          secondaryAction={
+            <IconButton
+              icon={<SettingsIcon />}
+              text={shouldNarrow ? undefined : Locale.Settings.Title}
+              onClick={() => {
+                navigate(Path.Settings);
+              }}
+              shadow
+            />
+          }
+        />
+      )}
     </SideBarContainer>
   );
 }
