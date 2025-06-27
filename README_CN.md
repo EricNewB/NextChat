@@ -44,9 +44,26 @@
 
 </div>
 
+## 功能特性
+
+- 🚀 **响应迅速**：我们优化了响应速度，让你的对话体验如丝般顺滑。
+- ✨ **界面精美**：我们精心设计了用户界面，支持响应式布局和多种主题，包括深色模式。
+- 🗣️ **智能对话**：我们支持多种会话模式，包括上下文关联、角色扮演和长文会话，让你的对话更具深度。
+- 🤖 **自定义机器人**：我们提供了丰富的内置角色，也支持自定义角色，让你的聊天机器人更具个性。
+- 🎨 **自定义主题**：我们支持一键切换主题色，让你的界面更具个性化。
+- 🧩 **插件系统**：我们提供了强大的插件系统，支持多种实用工具，如联网搜索、计算器和图表绘制，让你的聊天机器人更具实用性。
+- 🖼️ **图片生成**：我们集成了多种图片生成模型，让你的聊天机器人也能生成图片。
+- 🔊 **语音交互**：我们支持语音输入（ASR）和语音输出（TTS），让你的对话更具沉浸感。
+- 🎭 **为语音聊天配置Mask**: 实时语音聊天会自动应用当前所选Mask的系统提示词（System Prompt）。要进行配置，请在Mask的上下文中添加一个`role`为`system`的消息。该消息的`content`将被用作AI在语音对话中的核心指令，以定义其角色和行为。可以参考 `NextChat/app/masks/index.ts` 中的 `emoraMask` 作为实现示例。
+- 📜 **聊天记录**：我们支持本地和云端存储聊天记录，让你的对话永不丢失。
+- 📤 **导出功能**：我们支持导出聊天记录为图片、长图、PDF或JSON文件，让你的分享更具创意。
+- 🔍 **全文搜索**：我们支持对聊天记录进行全文搜索，让你快速找到所需信息。
+- 压缩历史摘要：我们支持压缩历史聊天记录，让你在节省Token的同时，也能保持对话的连贯性。
+- 跨平台：我们支持在所有平台上使用，包括Web、Windows、MacOS和Linux。
+
 ## 保持更新
 
-如果你按照上述步骤一键部署了自己的项目，可能会发现总是提示“存在更新”的问题，这是由于 Vercel 会默认为你创建一个新项目而不是 fork 本项目，这会导致无法正确地检测更新。
+如果你按照上述步骤一键部署了自己的项目，可能会发现总是提示"存在更新"的问题，这是由于 Vercel 会默认为你创建一个新项目而不是 fork 本项目，这会导致无法正确地检测更新。
 推荐你按照下列步骤重新部署：
 
 - 删除掉原先的仓库；
@@ -234,7 +251,7 @@ DeepSeek Api Url.
 
 在Azure的模式下，支持使用`modelName@Azure=deploymentName`的方式配置模型名称和部署名称(deploy-name)
 > 示例：`+gpt-3.5-turbo@Azure=gpt35`这个配置会在模型列表显示一个`gpt35(Azure)`的选项。
-> 如果你只能使用Azure模式，那么设置 `-all,+gpt-3.5-turbo@Azure=gpt35` 则可以让对话的默认使用 `gpt35(Azure)`
+> 如果你只能使用Azure模式，那么设置 `-all,+gpt-3.5-turbo@Azure=gpt35` 则会让对话的默认使用 `gpt35(Azure)`
 
 在ByteDance的模式下，支持使用`modelName@bytedance=deploymentName`的方式配置模型名称和部署名称(deploy-name)
 > 示例: `+Doubao-lite-4k@bytedance=ep-xxxxx-xxx`这个配置会在模型列表显示一个`Doubao-lite-4k(ByteDance)`的选项
@@ -248,8 +265,6 @@ DeepSeek Api Url.
 
 > 默认值：空
 > 示例：`gpt-4-vision,claude-3-opus,my-custom-model` 表示为这些模型添加视觉能力，作为对默认模式匹配的补充（默认会检测包含"vision"、"claude-3"、"gemini-1.5"等关键词的模型）。
-
-在默认模式匹配之外，添加更多具有视觉能力的模型。多个模型用逗号分隔。
 
 ### `DEFAULT_INPUT_TEMPLATE` （可选）
 
@@ -274,6 +289,65 @@ SiliconFlow API Key.
 ### `SILICONFLOW_URL` (optional)
 
 SiliconFlow API URL.
+
+## 目录
+
+- [企业版](#企业版)
+- [开始使用](#开始使用)
+- [保持更新](#保持更新)
+  - [打开自动更新](#打开自动更新)
+  - [手动更新代码](#手动更新代码)
+- [配置页面访问密码](#配置页面访问密码)
+- [环境变量](#环境变量)
+  - [`OPENAI_API_KEY` （必填项）](#openai_api_key-必填项)
+  - [`CODE` （可选）](#code-可选)
+  - [`BASE_URL` （可选）](#base_url-可选)
+  - [`OPENAI_ORG_ID` （可选）](#openai_org_id-可选)
+  - [`AZURE_URL` （可选）](#azure_url-可选)
+  - [`AZURE_API_KEY` （可选）](#azure_api_key-可选)
+  - [`AZURE_API_VERSION` （可选）](#azure_api_version-可选)
+  - [`GOOGLE_API_KEY` (可选)](#google_api_key-可选)
+  - [`GOOGLE_URL` (可选)](#google_url-可选)
+  - [`ANTHROPIC_API_KEY` (可选)](#anthropic_api_key-可选)
+  - [`ANTHROPIC_API_VERSION` (可选)](#anthropic_api_version-可选)
+  - [`ANTHROPIC_URL` (可选)](#anthropic_url-可选)
+  - [`BAIDU_API_KEY` (可选)](#baidu_api_key-可选)
+  - [`BAIDU_SECRET_KEY` (可选)](#baidu_secret_key-可选)
+  - [`BAIDU_URL` (可选)](#baidu_url-可选)
+  - [`BYTEDANCE_API_KEY` (可选)](#bytedance_api_key-可选)
+  - [`BYTEDANCE_URL` (可选)](#bytedance_url-可选)
+  - [`ALIBABA_API_KEY` (可选)](#alibaba_api_key-可选)
+  - [`ALIBABA_URL` (可选)](#alibaba_url-可选)
+  - [`IFLYTEK_URL` (可选)](#iflytek_url-可选)
+  - [`IFLYTEK_API_KEY` (可选)](#iflytek_api_key-可选)
+  - [`IFLYTEK_API_SECRET` (可选)](#iflytek_api_secret-可选)
+  - [`CHATGLM_API_KEY` (可选)](#chatglm_api_key-可选)
+  - [`CHATGLM_URL` (可选)](#chatglm_url-可选)
+  - [`DEEPSEEK_API_KEY` (可选)](#deepseek_api_key-可选)
+  - [`DEEPSEEK_URL` (可选)](#deepseek_url-可选)
+  - [`HIDE_USER_API_KEY` （可选）](#hide_user_api_key-可选)
+  - [`DISABLE_GPT4` （可选）](#disable_gpt4-可选)
+  - [`ENABLE_BALANCE_QUERY` （可选）](#enable_balance_query-可选)
+  - [`DISABLE_FAST_LINK` （可选）](#disable_fast_link-可选)
+  - [`WHITE_WEBDAV_ENDPOINTS` (可选)](#white_webdav_endpoints-可选)
+  - [`CUSTOM_MODELS` （可选）](#custom_models-可选)
+  - [`DEFAULT_MODEL` （可选）](#default_model-可选)
+  - [`VISION_MODELS` (可选)](#vision_models-可选)
+- [常见问题](#常见问题)
+- [提交issues](#提交issues)
+- [在 Docker 中部署](#在-docker-中部署)
+  - [Docker 环境变量](#docker-环境变量)
+  - [保持最新版本](#保持最新版本)
+- [开发](#开发)
+  - [本地开发](#本地开发)
+  - [环境变量](#环境变量)
+  - [开发代理](#开发代理)
+- [部署](#部署)
+- [贡献](#贡献)
+- [鸣谢](#鸣谢)
+- [开源协议](#开源协议)
+
+[MIT](https://opensource.org/license/mit/)
 
 ## 开发
 
@@ -305,7 +379,7 @@ BASE_URL=https://b.nextweb.fun/api/proxy
 
 > Docker 版本需要在 20 及其以上，否则会提示找不到镜像。
 
-> ⚠️ 注意：docker 版本在大多数时间都会落后最新的版本 1 到 2 天，所以部署后会持续出现“存在更新”的提示，属于正常现象。
+> ⚠️ 注意：docker 版本在大多数时间都会落后最新的版本 1 到 2 天，所以部署后会持续出现"存在更新"的提示，属于正常现象。
 
 ```shell
 docker pull yidadaa/chatgpt-next-web
@@ -372,3 +446,5 @@ bash <(curl -s https://raw.githubusercontent.com/Yidadaa/ChatGPT-Next-Web/main/s
 ## 开源协议
 
 [MIT](https://opensource.org/license/mit/)
+
+## 快速上手

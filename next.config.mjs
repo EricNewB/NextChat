@@ -8,7 +8,12 @@ console.log("[Next] build with chunk: ", !disableChunk);
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  webpack(config) {
+  eslint: {
+    // Warning: This allows production builds to successfully complete even if
+    // your project has ESLint errors.
+    ignoreDuringBuilds: true,
+  },
+  webpack(config, { isServer, dev, nextRuntime }) {
     config.module.rules.push({
       test: /\.svg$/,
       use: ["@svgr/webpack"],

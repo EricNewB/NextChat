@@ -1,10 +1,4 @@
-import ReactMarkdown from "react-markdown";
 import "katex/dist/katex.min.css";
-import RemarkMath from "remark-math";
-import RemarkBreaks from "remark-breaks";
-import RehypeKatex from "rehype-katex";
-import RemarkGfm from "remark-gfm";
-import RehypeHighlight from "rehype-highlight";
 import { useRef, useState, RefObject, useEffect, useMemo } from "react";
 import { copyToClipboard, useWindowSize } from "../utils";
 import mermaid from "mermaid";
@@ -24,6 +18,8 @@ import { IconButton } from "./button";
 
 import { useAppConfig } from "../store/config";
 import clsx from "clsx";
+
+const texmath = require("markdown-it-texmath");
 
 export function Mermaid(props: { code: string }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -267,56 +263,27 @@ function tryWrapHtmlCode(text: string) {
     );
 }
 
-function _MarkDownContent(props: { content: string }) {
-  const escapedContent = useMemo(() => {
-    return tryWrapHtmlCode(escapeBrackets(props.content));
+function MarkDownContent(props: { content: string }) {
+  const renderMath = useMemo(() => {
+    return texmath.render(props.content);
   }, [props.content]);
 
   return (
-    <ReactMarkdown
-      remarkPlugins={[RemarkMath, RemarkGfm, RemarkBreaks]}
-      rehypePlugins={[
-        RehypeKatex,
-        [
-          RehypeHighlight,
-          {
-            detect: false,
-            ignoreMissing: true,
-          },
-        ],
-      ]}
-      components={{
-        pre: PreCode,
-        code: CustomCode,
-        p: (pProps) => <p {...pProps} dir="auto" />,
-        a: (aProps) => {
-          const href = aProps.href || "";
-          if (/\.(aac|mp3|opus|wav)$/.test(href)) {
-            return (
-              <figure>
-                <audio controls src={href}></audio>
-              </figure>
-            );
-          }
-          if (/\.(3gp|3g2|webm|ogv|mpeg|mp4|avi)$/.test(href)) {
-            return (
-              <video controls width="99.9%">
-                <source src={href} />
-              </video>
-            );
-          }
-          const isInternal = /^\/#/i.test(href);
-          const target = isInternal ? "_self" : aProps.target ?? "_blank";
-          return <a {...aProps} target={target} />;
-        },
+    <div
+      className="markdown-body"
+      dangerouslySetInnerHTML={{
+        __html: renderMath,
       }}
-    >
-      {escapedContent}
-    </ReactMarkdown>
+    ></div>
   );
 }
 
-export const MarkdownContent = React.memo(_MarkDownContent);
+export const MarkdownContent = React.memo(
+  MarkDownContent,
+  (prevProps, nextProps) => {
+    return prevProps.content === nextProps.content;
+  },
+);
 
 export function Markdown(
   props: {
