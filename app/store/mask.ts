@@ -11,7 +11,7 @@ export type Mask = {
   createdAt: number;
   avatar: string;
   name: string;
-  hideContext?: true;
+  hideContext?: boolean;
   context: ChatMessage[];
   syncGlobalConfig?: boolean;
   modelConfig: ModelConfig;
@@ -20,6 +20,9 @@ export type Mask = {
   plugin?: string[];
   enableArtifacts?: boolean;
   enableCodeFold?: boolean;
+  constrolTokens?: boolean;
+  enableMemory?: boolean;
+  memoryWordLimit?: number;
 };
 
 export const DEFAULT_MASK_STATE = {
