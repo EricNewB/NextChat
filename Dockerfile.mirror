@@ -1,5 +1,6 @@
-# 使用官方 Node.js 镜像，配合阿里云构建环境
-FROM node:18-alpine AS base
+# 使用国内镜像源避免 Docker Hub 限制
+# 这个镜像源通常在中国大陆可用
+FROM dockerproxy.com/library/node:18-alpine AS base
 
 FROM base AS deps
 
