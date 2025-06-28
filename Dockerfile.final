@@ -10,7 +10,8 @@ RUN apk add --no-cache libc6-compat
 
 WORKDIR /app
 
-COPY package.json yarn.lock ./
+# 从 NextChat/ 目录复制关键文件
+COPY NextChat/package.json NextChat/yarn.lock ./
 
 # 使用阿里云 npm 镜像源加速依赖安装
 RUN yarn config set registry 'https://registry.npmmirror.com/'
@@ -29,7 +30,8 @@ ENV CODE=""
 
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+# 从 NextChat/ 目录复制所有源代码
+COPY NextChat/ .
 
 RUN yarn build
 
@@ -47,11 +49,13 @@ ENV GOOGLE_API_KEY=""
 ENV CODE=""
 ENV ENABLE_MCP=""
 
+# 从构建器中复制构建好的产物，注意路径
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/.next/server ./.next/server
 
+# MCP 相关的路径也需要正确
 RUN mkdir -p /app/app/mcp && chmod 777 /app/app/mcp
 COPY --from=builder /app/app/mcp/mcp_config.default.json /app/app/mcp/mcp_config.json
 
