@@ -56,8 +56,8 @@ const config = getClientConfig();
 const serverRealtimeConfig = config?.realtimeConfig;
 
 const defaultRealtimeConfig: IRealtimeConfig = {
-  // Enable realtime chat by default regardless of server config
-  enable: true,
+  // enable realtime chat by default, falling back to server config when present
+  enable: serverRealtimeConfig?.enabled ?? true,
   provider: (serverRealtimeConfig?.provider ?? "OpenAI") as ServiceProvider,
   model: serverRealtimeConfig?.model ?? "gpt-4o-realtime-preview-2024-10-01",
   apiKey: serverRealtimeConfig?.apiKey ?? "", // Note: This key is read from server config and will be persisted in local storage.
