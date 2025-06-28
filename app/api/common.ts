@@ -3,7 +3,7 @@ import { getServerSideConfig } from "../config/server";
 import { OPENAI_BASE_URL, ServiceProvider } from "../constant";
 import { cloudflareAIGatewayUrl } from "../utils/cloudflare";
 import { getModelProvider, isModelNotavailableInServer } from "../utils/model";
-import { getBearerToken } from "../client/api";
+import { getBearerToken } from "../utils/auth";
 
 const serverConfig = getServerSideConfig();
 

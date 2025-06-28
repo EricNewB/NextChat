@@ -24,6 +24,7 @@ import { DeepSeekApi } from "./platforms/deepseek";
 import { XAIApi } from "./platforms/xai";
 import { ChatGLMApi } from "./platforms/glm";
 import { SiliconflowApi } from "./platforms/siliconflow";
+import { getBearerToken } from "../utils/auth";
 
 export const ROLES = ["system", "user", "assistant"] as const;
 export type MessageRole = (typeof ROLES)[number];
@@ -222,19 +223,6 @@ export class ClientApi {
       return `https://shareg.pt/${resJson.id}`;
     }
   }
-}
-
-export function getBearerToken(
-  apiKey: string,
-  noBearer: boolean = false,
-): string {
-  return validString(apiKey)
-    ? `${noBearer ? "" : "Bearer "}${apiKey.trim()}`
-    : "";
-}
-
-export function validString(x: string): boolean {
-  return x?.length > 0;
 }
 
 export function getHeaders(ignoreHeaders: boolean = false) {
