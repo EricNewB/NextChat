@@ -1,31 +1,10 @@
-import { type OpenAIListModelResponse } from "@/app/client/platforms/openai";
-import { getServerSideConfig } from "@/app/config/server";
-import { ModelProvider, OpenaiPath } from "@/app/constant";
-import { NextRequest, NextResponse } from "next/server";
-import { auth } from "./auth";
 import { requestOpenai } from "./common";
+import { auth } from "./auth";
+import { ModelProvider } from "@/app/constant";
+import { NextRequest, NextResponse } from "next/server";
+import { prettyObject } from "@/app/utils/format";
 
-const ALLOWED_PATH = new Set(Object.values(OpenaiPath));
-
-function getModels(remoteModelRes: OpenAIListModelResponse) {
-  const config = getServerSideConfig();
-
-  if (config.disableGPT4) {
-    remoteModelRes.data = remoteModelRes.data.filter(
-      (m) =>
-        !(
-          m.id.startsWith("gpt-4") ||
-          m.id.startsWith("chatgpt-4o") ||
-          m.id.startsWith("o1") ||
-          m.id.startsWith("o3")
-        ) || m.id.startsWith("gpt-4o-mini"),
-    );
-  }
-
-  return remoteModelRes;
-}
-
-async function handle(
+export async function handle(
   req: NextRequest,
   { params }: { params: { path: string[] } },
 ) {
@@ -42,8 +21,17 @@ async function handle(
     });
   }
 
-  // ALL requests should go through the common handler
-  return requestOpenai(req);
+  try {
+    // ALL requests should go through the common handler,
+    // which is already fixed to use server-side config.
+    return await requestOpenai(req);
+  } catch (e) {
+    console.error("[OpenAI Route Error] ", e);
+    return NextResponse.json(prettyObject(e));
+  }
 }
 
 export const GET = handle;
+export const POST = handle;
+
+export const runtime = "edge";
