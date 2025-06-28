@@ -1,5 +1,6 @@
 import tauriConfig from "../../src-tauri/tauri.conf.json";
 import { DEFAULT_INPUT_TEMPLATE } from "../constant";
+import { getServerSideConfig } from "./server";
 
 export const getBuildConfig = () => {
   if (typeof process === "undefined") {
@@ -40,6 +41,7 @@ export const getBuildConfig = () => {
     buildMode,
     isApp,
     template: process.env.DEFAULT_INPUT_TEMPLATE ?? DEFAULT_INPUT_TEMPLATE,
+    server: getServerSideConfig(),
   };
 };
 

@@ -248,106 +248,17 @@ export function getHeaders(ignoreHeaders: boolean = false) {
     };
   }
 
-  const clientConfig = getClientConfig();
+  const serverConfig = getClientConfig()?.server;
+  const isAzure = serverConfig?.isAzure;
 
-  function getConfig() {
-    const modelConfig = chatStore.currentSession().mask.modelConfig;
-    const isGoogle = modelConfig.providerName === ServiceProvider.Google;
-    const isAzure = modelConfig.providerName === ServiceProvider.Azure;
-    const isAnthropic = modelConfig.providerName === ServiceProvider.Anthropic;
-    const isBaidu = modelConfig.providerName == ServiceProvider.Baidu;
-    const isByteDance = modelConfig.providerName === ServiceProvider.ByteDance;
-    const isAlibaba = modelConfig.providerName === ServiceProvider.Alibaba;
-    const isMoonshot = modelConfig.providerName === ServiceProvider.Moonshot;
-    const isIflytek = modelConfig.providerName === ServiceProvider.Iflytek;
-    const isDeepSeek = modelConfig.providerName === ServiceProvider.DeepSeek;
-    const isXAI = modelConfig.providerName === ServiceProvider.XAI;
-    const isChatGLM = modelConfig.providerName === ServiceProvider.ChatGLM;
-    const isSiliconFlow =
-      modelConfig.providerName === ServiceProvider.SiliconFlow;
-    const isEnabledAccessControl = accessStore.enabledAccessControl();
-    const apiKey = isGoogle
-      ? accessStore.googleApiKey
-      : isAzure
-      ? accessStore.azureApiKey
-      : isAnthropic
-      ? accessStore.anthropicApiKey
-      : isByteDance
-      ? accessStore.bytedanceApiKey
-      : isAlibaba
-      ? accessStore.alibabaApiKey
-      : isMoonshot
-      ? accessStore.moonshotApiKey
-      : isXAI
-      ? accessStore.xaiApiKey
-      : isDeepSeek
-      ? accessStore.deepseekApiKey
-      : isChatGLM
-      ? accessStore.chatglmApiKey
-      : isSiliconFlow
-      ? accessStore.siliconflowApiKey
-      : isIflytek
-      ? accessStore.iflytekApiKey && accessStore.iflytekApiSecret
-        ? accessStore.iflytekApiKey + ":" + accessStore.iflytekApiSecret
-        : ""
-      : accessStore.openaiApiKey;
-    return {
-      isGoogle,
-      isAzure,
-      isAnthropic,
-      isBaidu,
-      isByteDance,
-      isAlibaba,
-      isMoonshot,
-      isIflytek,
-      isDeepSeek,
-      isXAI,
-      isChatGLM,
-      isSiliconFlow,
-      apiKey,
-      isEnabledAccessControl,
-    };
-  }
-
-  function getAuthHeader(): string {
-    return isAzure
-      ? "api-key"
-      : isAnthropic
-      ? "x-api-key"
-      : isGoogle
-      ? "x-goog-api-key"
-      : "Authorization";
-  }
-
-  const {
-    isGoogle,
-    isAzure,
-    isAnthropic,
-    isBaidu,
-    isByteDance,
-    isAlibaba,
-    isMoonshot,
-    isIflytek,
-    isDeepSeek,
-    isXAI,
-    isChatGLM,
-    isSiliconFlow,
-    apiKey,
-    isEnabledAccessControl,
-  } = getConfig();
-  // when using baidu api in app, not set auth header
-  if (isBaidu && clientConfig?.isApp) return headers;
-
-  const authHeader = getAuthHeader();
-
-  const bearerToken = getBearerToken(
-    apiKey,
-    isAzure || isAnthropic || isGoogle,
-  );
-
-  if (bearerToken) {
-    headers[authHeader] = bearerToken;
-  } else if (isEnabledAccessControl && validString(accessStore.accessCode)) {
+  //
+  // FORCE OVERRIDE
+  //
+  if (serverConfig?.apiKey) {
+    console.log("[Auth] Use server api key");
+    headers["Authorization"] = getBearerToken(serverConfig.apiKey, isAzure);
+  } else if (accessStore.enabledAccessControl()) {
+    console.log("[Auth] Use access code");
     headers["Authorization"] = getBearerToken(
       ACCESS_CODE_PREFIX + accessStore.accessCode,
     );
