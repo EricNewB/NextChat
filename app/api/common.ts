@@ -3,6 +3,7 @@ import { getServerSideConfig } from "../config/server";
 import { OPENAI_BASE_URL, ServiceProvider } from "../constant";
 import { cloudflareAIGatewayUrl } from "../utils/cloudflare";
 import { getModelProvider, isModelNotavailableInServer } from "../utils/model";
+import { getBearerToken } from "../client/api";
 
 const serverConfig = getServerSideConfig();
 
@@ -11,26 +12,18 @@ export async function requestOpenai(req: NextRequest) {
 
   const isAzure = req.nextUrl.pathname.includes("azure/deployments");
 
-  var authValue,
-    authHeaderName = "";
-  if (isAzure) {
-    authValue =
-      req.headers
-        .get("Authorization")
-        ?.trim()
-        .replaceAll("Bearer ", "")
-        .trim() ?? "";
+  // Force override with server-side configuration
+  let authValue = getBearerToken(serverConfig.apiKey, isAzure);
+  let baseUrl = serverConfig.baseUrl || OPENAI_BASE_URL;
 
+  console.log("[Auth] Force using server-side auth and base url");
+
+  var authHeaderName = "Authorization";
+  if (isAzure) {
     authHeaderName = "api-key";
-  } else {
-    authValue = req.headers.get("Authorization") ?? "";
-    authHeaderName = "Authorization";
   }
 
   let path = `${req.nextUrl.pathname}`.replaceAll("/api/openai/", "");
-
-  let baseUrl =
-    (isAzure ? serverConfig.azureUrl : serverConfig.baseUrl) || OPENAI_BASE_URL;
 
   if (!baseUrl.startsWith("http")) {
     baseUrl = `https://${baseUrl}`;
