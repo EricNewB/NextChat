@@ -19,6 +19,8 @@ import { IconButton } from "./button";
 import { useAppConfig } from "../store/config";
 import clsx from "clsx";
 
+import MarkdownIt from "markdown-it";
+import katex from "katex";
 const texmath = require("markdown-it-texmath");
 
 export function Mermaid(props: { code: string }) {
@@ -264,9 +266,25 @@ function tryWrapHtmlCode(text: string) {
 }
 
 function MarkDownContent(props: { content: string }) {
+  const md = useMemo(() => {
+    const md = new MarkdownIt({
+      html: true,
+      linkify: true,
+    });
+    md.use(texmath, {
+      engine: katex,
+      delimiters: "dollars",
+      katexOptions: {
+        macros: { "\\RR": "\\mathbb{R}" },
+      },
+    });
+
+    return md;
+  }, []);
+
   const renderMath = useMemo(() => {
-    return texmath.render(props.content);
-  }, [props.content]);
+    return md.render(props.content);
+  }, [props.content, md]);
 
   return (
     <div
