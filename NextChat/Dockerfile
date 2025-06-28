@@ -1,65 +1,56 @@
-# 使用 Daocloud 公共镜像源，稳定且无需授权
-FROM docker.m.daocloud.io/library/node:18-alpine AS base
+# --- Builder Stage ---
+# 使用一个包含 git 的基础镜像
+FROM docker.m.daocloud.io/library/node:18-alpine AS builder
 
-FROM base AS deps
+# 设置 Alpine 包管理器使用阿里云镜像源，并安装 git
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && \
+    apk add --no-cache git
 
-# 设置 Alpine 包管理器使用阿里云镜像源
-RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
+# 在容器内克隆您的仓库，这使得构建过程完全独立，绕开阿里云的文件系统问题
+RUN git clone https://github.com/EricNewB/NextChat.git /build
 
-RUN apk add --no-cache libc6-compat
+# 设置工作目录为项目文件夹
+WORKDIR /build/NextChat
 
-WORKDIR /app
+# 设置 npm 镜像源并安装依赖
+RUN yarn config set registry 'https://registry.npmmirror.com/' && \
+    yarn install
 
-# 在 NextChat/ 上下文中，直接复制文件
-COPY package.json yarn.lock ./
-
-# 使用阿里云 npm 镜像源加速依赖安装
-RUN yarn config set registry 'https://registry.npmmirror.com/'
-RUN yarn install
-
-FROM base AS builder
-
-# 设置 Alpine 包管理器使用阿里云镜像源
-RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
-
-RUN apk update && apk add --no-cache git
-
-ENV OPENAI_API_KEY=""
-ENV GOOGLE_API_KEY=""
-ENV CODE=""
-
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-# 在 NextChat/ 上下文中，直接复制所有内容
-COPY . .
-
+# 执行构建
 RUN yarn build
 
-FROM base AS runner
+
+# --- Runner Stage ---
+# 使用一个干净的 Node.js 镜像作为最终运行环境
+FROM docker.m.daocloud.io/library/node:18-alpine AS runner
+
+# 设置 Alpine 包管理器使用阿里云镜像源，并安装必要的工具
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && \
+    apk add --no-cache proxychains-ng libc6-compat
+
+# 设置最终的工作目录
 WORKDIR /app
 
-# 设置 Alpine 包管理器使用阿里云镜像源
-RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
+# 从 builder 阶段复制构建好的产物到当前阶段
+COPY --from=builder /build/NextChat/public ./public
+COPY --from=builder /build/NextChat/.next/standalone ./
+COPY --from=builder /build/NextChat/.next/static ./.next/static
+COPY --from=builder /build/NextChat/.next/server ./.next/server
 
-RUN apk add proxychains-ng
+# 创建并设置 MCP 目录的权限
+RUN mkdir -p /app/app/mcp && chmod 777 /app/app/mcp
+# 复制 MCP 配置文件
+COPY --from=builder /build/NextChat/app/mcp/mcp_config.default.json /app/app/mcp/mcp_config.json
 
+# 暴露端口
+EXPOSE 3000
+
+# 保持环境变量和启动命令不变
 ENV PROXY_URL=""
 ENV OPENAI_API_KEY=""
 ENV GOOGLE_API_KEY=""
 ENV CODE=""
 ENV ENABLE_MCP=""
-
-# 从构建器中复制构建好的产物
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/.next/server ./.next/server
-
-# MCP 相关的路径也需要正确
-RUN mkdir -p /app/app/mcp && chmod 777 /app/app/mcp
-COPY --from=builder /app/app/mcp/mcp_config.default.json /app/app/mcp/mcp_config.json
-
-EXPOSE 3000
 
 CMD if [ -n "$PROXY_URL" ]; then \
     export HOSTNAME="0.0.0.0"; \
