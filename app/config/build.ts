@@ -34,12 +34,26 @@ export const getBuildConfig = () => {
     }
   })();
 
+  const realtimeConfig = {
+    enabled: !!process.env.REALTIME_API_KEY,
+    provider: process.env.REALTIME_PROVIDER ?? "OpenAI",
+    apiKey: process.env.REALTIME_API_KEY ?? "",
+    model: process.env.REALTIME_MODEL ?? "gpt-4o-realtime-preview-2024-10-01",
+    voice: process.env.REALTIME_VOICE ?? "alloy",
+    temperature: parseFloat(process.env.REALTIME_TEMPERATURE ?? "0.9"),
+    azure: {
+      endpoint: process.env.REALTIME_AZURE_ENDPOINT,
+      deployment: process.env.REALTIME_AZURE_DEPLOYMENT,
+    },
+  };
+
   return {
     version,
     ...commitInfo,
     buildMode,
     isApp,
     template: process.env.DEFAULT_INPUT_TEMPLATE ?? DEFAULT_INPUT_TEMPLATE,
+    realtimeConfig,
   };
 };
 

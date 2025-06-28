@@ -36,7 +36,37 @@ export enum Theme {
   Light = "light",
 }
 
+// Define the type structure to break the circular dependency
+interface IRealtimeConfig {
+  enable: boolean;
+  provider: ServiceProvider;
+  model: string;
+  apiKey: string;
+  azure: {
+    endpoint: string;
+    deployment: string;
+  };
+  temperature: number;
+  voice: Voice;
+}
+
 const config = getClientConfig();
+
+// read realtime config from server
+const serverRealtimeConfig = config?.realtimeConfig;
+
+const defaultRealtimeConfig: IRealtimeConfig = {
+  enable: serverRealtimeConfig?.enabled ?? false,
+  provider: (serverRealtimeConfig?.provider ?? "OpenAI") as ServiceProvider,
+  model: serverRealtimeConfig?.model ?? "gpt-4o-realtime-preview-2024-10-01",
+  apiKey: serverRealtimeConfig?.apiKey ?? "", // Note: This key is read from server config and will be persisted in local storage.
+  azure: {
+    endpoint: serverRealtimeConfig?.azure?.endpoint ?? "",
+    deployment: serverRealtimeConfig?.azure?.deployment ?? "",
+  },
+  temperature: serverRealtimeConfig?.temperature ?? 0.9,
+  voice: (serverRealtimeConfig?.voice ?? "alloy") as Voice,
+};
 
 export const DEFAULT_CONFIG = {
   lastUpdate: Date.now(), // timestamp, to merge state
@@ -92,18 +122,7 @@ export const DEFAULT_CONFIG = {
     speed: 1.0,
   },
 
-  realtimeConfig: {
-    enable: false,
-    provider: "OpenAI" as ServiceProvider,
-    model: "gpt-4o-realtime-preview-2024-10-01",
-    apiKey: "",
-    azure: {
-      endpoint: "",
-      deployment: "",
-    },
-    temperature: 0.9,
-    voice: "alloy" as Voice,
-  },
+  realtimeConfig: defaultRealtimeConfig,
 };
 
 export type ChatConfig = typeof DEFAULT_CONFIG;
