@@ -4,7 +4,7 @@ import {
   ACCESS_CODE_PREFIX,
   ApiPath,
 } from "@/app/constant";
-import { getBearerToken } from "@/app/client/api";
+import { getBearerToken } from "@/app/utils/auth";
 import { createPersistStore } from "@/app/utils/store";
 import { nanoid } from "nanoid";
 import { uploadImage, base64Image2Blob } from "@/app/utils/chat";
