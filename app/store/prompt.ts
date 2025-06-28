@@ -112,6 +112,7 @@ export const usePromptStore = createPersistStore(
         title: "",
         content: "",
         id,
+        createdAt: Date.now(),
       };
 
       SearchService.remove(id);
