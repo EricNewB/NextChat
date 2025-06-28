@@ -1887,7 +1887,7 @@ function ChatComponent() {
                                       text={Locale.Chat.Actions.Stop}
                                       icon={<StopIcon />}
                                       onClick={() =>
-                                        onUserStop(message.id ?? i)
+                                        onUserStop(message.id ?? i.toString())
                                       }
                                     />
                                   ) : (
@@ -1902,7 +1902,7 @@ function ChatComponent() {
                                         text={Locale.Chat.Actions.Delete}
                                         icon={<DeleteIcon />}
                                         onClick={() =>
-                                          onDelete(message.id ?? i)
+                                          onDelete(message.id ?? i.toString())
                                         }
                                       />
 
