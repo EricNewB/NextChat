@@ -12,12 +12,12 @@ export interface McpRequestMessage {
   };
 }
 
-export const McpRequestMessageSchema: z.ZodType<McpRequestMessage> = z.object({
+export const McpRequestMessageSchema = z.object({
   jsonrpc: z.literal("2.0").optional(),
   id: z.union([z.string(), z.number()]).optional(),
   method: z.string(),
   params: z.record(z.unknown()).optional(),
-});
+}) as z.ZodType<McpRequestMessage>;
 
 export interface McpResponseMessage {
   jsonrpc?: "2.0";
@@ -32,20 +32,18 @@ export interface McpResponseMessage {
   };
 }
 
-export const McpResponseMessageSchema: z.ZodType<McpResponseMessage> = z.object(
-  {
-    jsonrpc: z.literal("2.0").optional(),
-    id: z.union([z.string(), z.number()]).optional(),
-    result: z.record(z.unknown()).optional(),
-    error: z
-      .object({
-        code: z.number(),
-        message: z.string(),
-        data: z.unknown().optional(),
-      })
-      .optional(),
-  },
-);
+export const McpResponseMessageSchema = z.object({
+  jsonrpc: z.literal("2.0").optional(),
+  id: z.union([z.string(), z.number()]).optional(),
+  result: z.record(z.unknown()).optional(),
+  error: z
+    .object({
+      code: z.number(),
+      message: z.string(),
+      data: z.unknown().optional(),
+    })
+    .optional(),
+}) as z.ZodType<McpResponseMessage>;
 
 export interface McpNotifications {
   jsonrpc?: "2.0";
@@ -55,11 +53,11 @@ export interface McpNotifications {
   };
 }
 
-export const McpNotificationsSchema: z.ZodType<McpNotifications> = z.object({
+export const McpNotificationsSchema = z.object({
   jsonrpc: z.literal("2.0").optional(),
   method: z.string(),
   params: z.record(z.unknown()).optional(),
-});
+}) as z.ZodType<McpNotifications>;
 
 ////////////
 // Next Chat

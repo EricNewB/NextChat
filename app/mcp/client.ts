@@ -44,7 +44,7 @@ export async function removeClient(client: Client) {
 }
 
 export async function listTools(client: Client): Promise<ListToolsResponse> {
-  return client.listTools();
+  return client.listTools() as unknown as ListToolsResponse;
 }
 
 export async function executeRequest(

@@ -191,7 +191,7 @@ export function MessageSelector(props: {
       <div className={styles["messages"]}>
         {messages.map((m, i) => {
           if (!isInSearchResult(m.id!)) return null;
-          const id = m.id ?? i;
+          const id = m.id ?? String(i);
           const isSelected = props.selection.has(id);
 
           return (
