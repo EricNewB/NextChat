@@ -1,6 +1,18 @@
 # 使用 Daocloud 公共镜像源，稳定且无需授权
 FROM docker.m.daocloud.io/library/node:18-alpine AS base
 
+# --- 诊断阶段 ---
+# 这个阶段的唯一目的是检查阿里云构建服务提供的构建上下文
+FROM base AS diagnostic
+WORKDIR /context
+# 将整个构建上下文复制到此目录中
+COPY . .
+# 递归列出所有内容。我们需要的正是这个命令的输出日志。
+# 这个命令执行后，构建会停止，但我们能从日志中看到文件系统的确切结构。
+RUN ls -laR .
+# --- 诊断阶段结束 ---
+
+
 FROM base AS deps
 
 # 设置 Alpine 包管理器使用阿里云镜像源
