@@ -1,8 +1,9 @@
-FROM node:18-alpine AS base
+FROM docker.m.daocloud.io/library/node:18-alpine AS base
 
 FROM base AS deps
 
-RUN apk add --no-cache libc6-compat
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories \
+    && apk add --no-cache libc6-compat
 
 WORKDIR /app
 
@@ -13,7 +14,8 @@ RUN yarn install
 
 FROM base AS builder
 
-RUN apk update && apk add --no-cache git
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories \
+    && apk update && apk add --no-cache git
 
 ENV OPENAI_API_KEY=""
 ENV GOOGLE_API_KEY=""
@@ -28,7 +30,8 @@ RUN yarn build
 FROM base AS runner
 WORKDIR /app
 
-RUN apk add proxychains-ng
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories \
+    && apk add proxychains-ng
 
 ENV PROXY_URL=""
 ENV OPENAI_API_KEY=""
