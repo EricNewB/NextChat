@@ -56,9 +56,21 @@ const config = getClientConfig();
 const serverRealtimeConfig = config?.realtimeConfig;
 
 const defaultRealtimeConfig: IRealtimeConfig = {
+const defaultRealtimeConfig: IRealtimeConfig = {
   // Enable realtime chat by default regardless of server config so the
   // Realtime Chat button is always visible.
   enable: true,
+  provider: (serverRealtimeConfig?.provider ?? "OpenAI") as ServiceProvider,
+  model: serverRealtimeConfig?.model ?? "gpt-4o-realtime-preview-2024-10-01",
+  apiKey: serverRealtimeConfig?.apiKey ?? "", // Note: This key is read from server config and will be persisted in local storage.
+  azure: {
+    endpoint: serverRealtimeConfig?.azure?.endpoint ?? "",
+    deployment: serverRealtimeConfig?.azure?.deployment ?? "",
+  },
+  temperature: serverRealtimeConfig?.temperature ?? 0.9,
+  voice: (serverRealtimeConfig?.voice ?? "alloy") as Voice,
+};
+
   provider: (serverRealtimeConfig?.provider ?? "OpenAI") as ServiceProvider,
   model: serverRealtimeConfig?.model ?? "gpt-4o-realtime-preview-2024-10-01",
   apiKey: serverRealtimeConfig?.apiKey ?? "", // Note: This key is read from server config and will be persisted in local storage.
