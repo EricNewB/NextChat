@@ -137,7 +137,7 @@ export function MessageSelector(props: {
     const [start, end] = [startIndex, endIndex].sort((a, b) => a - b);
     props.updateSelection((selection) => {
       for (let i = start; i <= end; i += 1) {
-        selection.add(messages[i].id ?? i);
+        selection.add(messages[i].id ?? String(i));
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
