@@ -56,7 +56,7 @@ const config = getClientConfig();
 const serverRealtimeConfig = config?.realtimeConfig;
 
 const defaultRealtimeConfig: IRealtimeConfig = {
-  enable: serverRealtimeConfig?.enabled ?? false,
+  enable: serverRealtimeConfig?.enabled ?? true,
   provider: (serverRealtimeConfig?.provider ?? "OpenAI") as ServiceProvider,
   model: serverRealtimeConfig?.model ?? "gpt-4o-realtime-preview-2024-10-01",
   apiKey: serverRealtimeConfig?.apiKey ?? "", // Note: This key is read from server config and will be persisted in local storage.
