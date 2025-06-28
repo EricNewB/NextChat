@@ -87,10 +87,9 @@ export function RealtimeChat({
         ? BUILTIN_MASK_STORE.get(mask.id)?.context
         : [];
       const contextPrompts = mask.context ?? [];
-      const systemPrompts = builtinPrompts
-        ?.concat(contextPrompts)
-        .filter((p) => p.role === "system");
-      const instructions = systemPrompts.map((p) => p.content).join("\n\n");
+      // Combine all prompts so the realtime session has the same context as text chat
+      const allPrompts = builtinPrompts.concat(contextPrompts);
+      const instructions = allPrompts.map((p) => p.content).join("\n\n");
 
       if (instructions) {
         await clientRef.current.updateSession({
