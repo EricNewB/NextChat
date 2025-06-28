@@ -15,6 +15,7 @@ import { RealtimeClient } from "@openai/realtime-api-beta";
 import { AudioHandler } from "@/app/lib/audio";
 import { uploadImage } from "@/app/utils/chat";
 import { VoicePrint } from "@/app/components/voice-print";
+import { BUILTIN_MASK_STORE } from "@/app/masks";
 
 interface RealtimeChatProps {
   onClose?: () => void;
@@ -82,13 +83,18 @@ export function RealtimeChat({
       });
 
       const mask = session.mask;
-      const systemPrompt = mask.context?.find(
-        (m) => m.role === "system",
-      )?.content;
+      const builtinPrompts = mask.builtin
+        ? BUILTIN_MASK_STORE.get(mask.id)?.context
+        : [];
+      const contextPrompts = mask.context ?? [];
+      const systemPrompts = builtinPrompts
+        ?.concat(contextPrompts)
+        .filter((p) => p.role === "system");
+      const instructions = systemPrompts.map((p) => p.content).join("\n\n");
 
-      if (systemPrompt && typeof systemPrompt === "string") {
+      if (instructions) {
         await clientRef.current.updateSession({
-          instructions: systemPrompt,
+          instructions,
         });
       }
 
