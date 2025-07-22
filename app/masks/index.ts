@@ -148,6 +148,16 @@ const addedMask = BUILTIN_MASK_STORE.add(emoraMask);
 BUILTIN_MASKS.push(addedMask);
 export { addedMask as emoraMask };
 
+// A Chinese version of Emora using the same context
+const emoraMaskCn: BuiltinMask = {
+  ...emoraMask,
+  name: "Emora - 亲密关系发展伙伴",
+};
+
+const addedMaskCn = BUILTIN_MASK_STORE.add(emoraMaskCn);
+BUILTIN_MASKS.push(addedMaskCn);
+export { addedMaskCn as emoraMaskCn };
+
 /*
 if (typeof window != "undefined") {
   // run in browser skip in next server

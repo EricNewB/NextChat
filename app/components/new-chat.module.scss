@@ -65,7 +65,7 @@
     }
   }
 
-  .masks {
+.masks {
     flex-grow: 1;
     width: 100%;
     overflow: auto;
@@ -122,4 +122,21 @@
       }
     }
   }
+}
+
+.lang-select {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+}
+
+.lang-button {
+  padding: 10px 20px;
+  font-size: 16px;
+  border: var(--border-in-light);
+  border-radius: 8px;
+  background-color: var(--white);
+  cursor: pointer;
 }
